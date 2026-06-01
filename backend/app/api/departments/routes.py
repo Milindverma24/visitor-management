@@ -1,17 +1,10 @@
 from fastapi import APIRouter, HTTPException, Depends
 from sqlalchemy.orm import Session
-from app.database.session import SessionLocal
+from app.database.session import get_db
 from app.models.department import Department
 from app.schemas.department import DepartmentCreate, DepartmentUpdate, DepartmentResponse
 
 router = APIRouter()
-
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
 
 @router.get("/", response_model=list[DepartmentResponse])
 def get_departments(db: Session = Depends(get_db)):

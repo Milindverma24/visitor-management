@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Request, UploadFile, File, BackgroundTasks
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 
@@ -10,7 +10,6 @@ from app.models.visit import Visit
 from app.schemas.visit import VisitCreate
 from app.models.department import Department
 from datetime import datetime
-from fastapi import Request
 from app.utils.audit import create_audit_log
 from app.utils.qr_generator import generate_qr
 from app.utils.badge_generator import generate_badge
@@ -19,8 +18,6 @@ from app.utils.email_templates import render_approval_email, render_checkin_emai
 from app.utils.whatsapp_service import send_whatsapp
 from app.services import telegram_service
 
-from fastapi import UploadFile
-from fastapi import File
 import os
 import shutil
 
@@ -38,10 +35,7 @@ async def upload_photo(
     file: UploadFile = File(...)
 ):
 
-    os.makedirs(
-        "uploads/visitor_photos",
-        exist_ok=True
-    )
+
 
     file_path = os.path.join(
         "uploads",
@@ -72,7 +66,6 @@ def create_visitor(
     db: Session = SessionLocal()
 
     import base64
-    import os
     import time
     
     photo_path = None
@@ -83,7 +76,7 @@ def create_visitor(
             if "," in base64_data:
                 base64_data = base64_data.split(",")[1]
             
-            os.makedirs("uploads/photos", exist_ok=True)
+
             photo_filename = f"visitor_{int(time.time())}.jpg"
             photo_path = os.path.join("uploads/photos", photo_filename)
             
@@ -174,7 +167,8 @@ def search_visitor(phone_number: str):
 
 @router.post("/visit")
 def create_visit(
-    request: VisitCreate
+    request: VisitCreate,
+    background_tasks: BackgroundTasks
 ):
 
     db: Session = SessionLocal()
@@ -193,7 +187,7 @@ def create_visit(
         
         # Telegram Blacklist Alert
         blacklist_msg = f"🚨 <b>SECURITY ALERT</b>\n\n<b>BLACKLISTED VISITOR DETECTED</b>\n\nVisitor: {visitor.full_name}\nPhone: {visitor.phone_number}\nDepartment: {request.department}\nTime: {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')}\n\nSecurity Verification Required"
-        telegram_service.send_security_notification(db, blacklist_msg, visitor.id)
+        background_tasks.add_task(bg_blacklist_alert, blacklist_msg, visitor.id)
 
         return {
             "success": False,
@@ -233,8 +227,8 @@ def create_visit(
         # Assuming photo_path has a leading slash in DB, e.g., /uploads/photos/...
         # we need relative path for telegram_service
         local_photo_path = visitor.photo_path.lstrip("/")
-        telegram_service.send_visitor_photo(
-            db=db,
+        background_tasks.add_task(
+            bg_visitor_photo,
             department=request.department or "Unknown",
             photo_path=local_photo_path,
             name=visitor.full_name,
@@ -294,7 +288,8 @@ def get_all_visits(user: dict = Depends(get_current_user)):
 @router.put("/approve/{visit_id}")
 def approve_visit(
     visit_id: int,
-    request: Request
+    request: Request,
+    background_tasks: BackgroundTasks
 ):
 
     db: Session = SessionLocal()
@@ -340,53 +335,21 @@ def approve_visit(
         ip_address=request.client.host
     )
 
-    ##################################################
-    # SEND APPROVAL EMAIL
-    ##################################################
+    db.commit()
 
-    visitor = db.query(
-        Visitor
-    ).filter(
-        Visitor.id == visit.visitor_id
-    ).first()
-
-    if visitor and visitor.email:
-        try:
-            email_body = render_approval_email(
-                visitor_name=visitor.full_name,
-                visit_date=visit.created_at.strftime("%Y-%m-%d %H:%M") if visit.created_at else datetime.utcnow().strftime("%Y-%m-%d %H:%M"),
-                host_name=visit.host_employee
-            )
-            send_email(
-                recipient_email=visitor.email,
-                subject="Your Visit is Approved - IGL",
-                body=email_body,
-                attachment_path=badge_path,
-                is_html=True
-            )
-        except Exception as e:
-            pass
-
-    db.refresh(visit)
-
-    # Telegram Approval Notifications
     dept_name = visit.department.name if visit.department else "Unknown"
-    approve_msg = f"✅ <b>VISITOR APPROVED</b>\n\nVisitor Name: {visitor.full_name}\nDepartment: {dept_name}\nHost Employee: {visit.host_employee}\nVisit ID: {visit.id}\nPass Type: {visit.pass_type or 'Standard'}\nDate: {datetime.utcnow().strftime('%Y-%m-%d')}\nTime: {datetime.utcnow().strftime('%H:%M:%S')}"
-    
-    telegram_service.send_admin_notification(db, approve_msg, visit.id)
-    telegram_service.send_department_notification(db, dept_name, approve_msg, visit.id)
-    
-    # Telegram Pass Generation Notification
-    if badge_path:
-        telegram_service.send_pass_notification(
-            db=db,
-            department=dept_name,
-            pass_path=badge_path,
-            pass_number=visit.card_id or str(visit.id),
-            name=visitor.full_name,
-            pass_type=visit.pass_type or "Standard",
-            target_id=visit.id
-        )
+
+    background_tasks.add_task(
+        bg_approval_notifications,
+        visitor_email=visitor.email if visitor else None,
+        visitor_name=visitor.full_name if visitor else "Unknown",
+        visit_date=visit.created_at.strftime("%Y-%m-%d %H:%M") if (visit.created_at and hasattr(visit.created_at, "strftime")) else datetime.utcnow().strftime("%Y-%m-%d %H:%M"),
+        host_name=visit.host_employee,
+        badge_path=badge_path,
+        dept_name=dept_name,
+        visit_id=visit.id,
+        card_id=visit.card_id
+    )
 
     return {
         "success": True,
@@ -394,14 +357,13 @@ def approve_visit(
         "qr_code": qr_path,
         "badge": badge_path
     }
-##################################################
-# REJECT VISIT
-##################################################
+
 
 @router.put("/reject/{visit_id}")
 def reject_visit(
     visit_id: int,
-    request: Request
+    request: Request,
+    background_tasks: BackgroundTasks
 ):
 
     db: Session = SessionLocal()
@@ -430,9 +392,7 @@ def reject_visit(
         ip_address=request.client.host
     )
 
-    ##################################################
-    # SEND REJECTION EMAIL
-    ##################################################
+    db.commit()
 
     visitor = db.query(
         Visitor
@@ -440,37 +400,17 @@ def reject_visit(
         Visitor.id == visit.visitor_id
     ).first()
 
-    if visitor and visitor.email:
-
-        send_email(
-            visitor.email,
-            "Visit Request Rejected",
-            f"""
-Hello {visitor.full_name},
-
-We regret to inform you that your visit request has been rejected.
-
-Visit ID: {visit.id}
-
-Host Employee:
-{visit.host_employee}
-
-Reason:
-{visit.rejection_reason}
-
-Please contact the concerned employee for more details.
-
-Thank You,
-Visitor Management Team
-            """
-        )
-
-    db.commit()
-    
-    # Telegram Rejection Notification
     dept_name = visit.department.name if visit.department else "Unknown"
-    reject_msg = f"❌ <b>VISITOR REJECTED</b>\n\nVisitor: {visitor.full_name if visitor else 'Unknown'}\nDepartment: {dept_name}\nReason: {visit.rejection_reason}"
-    telegram_service.send_department_notification(db, dept_name, reject_msg, visit.id)
+
+    background_tasks.add_task(
+        bg_rejection_notifications,
+        visitor_email=visitor.email if visitor else None,
+        visitor_name=visitor.full_name if visitor else "Unknown",
+        visit_id=visit.id,
+        host_name=visit.host_employee,
+        rejection_reason=visit.rejection_reason,
+        dept_name=dept_name
+    )
 
     return {
         "success": True,
@@ -483,7 +423,8 @@ Visitor Management Team
 @router.put("/checkin/{visit_id}")
 def checkin_visitor(
     visit_id: int,
-    request: Request
+    request: Request,
+    background_tasks: BackgroundTasks
 ):
 
     db: Session = SessionLocal()
@@ -521,42 +462,32 @@ def checkin_visitor(
     db.commit()
 
     visitor = db.query(Visitor).filter(Visitor.id == visit.visitor_id).first()
-    if visitor:
-        time_str = visit.check_in_time.strftime('%Y-%m-%d %H:%M:%S')
-        subject = f"Visitor Checked In: {visitor.full_name}"
-        
-        email_body = render_checkin_email(
-            visitor_name=visitor.full_name,
-            checkin_time=time_str,
-            host_name=visit.host_employee
-        )
-        
-        # Send to visitor
-        if visitor.email:
-            send_email(visitor.email, subject, email_body, is_html=True)
-            
-        # Send to security desk
-        send_email("security@company.com", subject, email_body, is_html=True)
-        
-    # Telegram Check-In Alert
-    dept_name = visit.department.name if visit.department else "Unknown"
     visitor_name = visitor.full_name if visitor else "Unknown"
-    checkin_msg = f"🟢 <b>VISITOR CHECKED IN</b>\n\nVisitor: {visitor_name}\nDepartment: {dept_name}\nGate: {visit.gate_number}\nCheck-In Time: {visit.check_in_time.strftime('%H:%M:%S') if visit.check_in_time else 'Unknown'}"
-    telegram_service.send_security_notification(db, checkin_msg, visit.id)
-    telegram_service.send_department_notification(db, dept_name, checkin_msg, visit.id)
+    time_str = visit.check_in_time.strftime('%Y-%m-%d %H:%M:%S')
+    dept_name = visit.department.name if visit.department else "Unknown"
+
+    background_tasks.add_task(
+        bg_checkin_notifications,
+        visitor_name=visitor_name,
+        time_str=time_str,
+        host_name=visit.host_employee,
+        visitor_email=visitor.email if visitor else None,
+        visit_id=visit.id,
+        gate_number=visit.gate_number,
+        dept_name=dept_name
+    )
 
     return {
         "success": True,
         "message": "Visitor Checked In"
     }
-##################################################
-# CHECK OUT VISITOR
-##################################################
+
 
 @router.put("/checkout/{visit_id}")
 def checkout_visitor(
     visit_id: int,
-    request: Request
+    request: Request,
+    background_tasks: BackgroundTasks
 ):
 
     db: Session = SessionLocal()
@@ -586,33 +517,20 @@ def checkout_visitor(
     db.commit()
 
     visitor = db.query(Visitor).filter(Visitor.id == visit.visitor_id).first()
-    if visitor:
-        time_str = visit.check_out_time.strftime('%Y-%m-%d %H:%M:%S')
-        subject = f"Visitor Checked Out: {visitor.full_name}"
-        
-        email_body = render_checkout_email(
-            visitor_name=visitor.full_name,
-            checkout_time=time_str
-        )
-        
-        # Send to visitor
-        if visitor.email:
-            send_email(visitor.email, subject, email_body, is_html=True)
-            
-        # Send to security desk
-        send_email("security@company.com", subject, email_body, is_html=True)
-        
-        # WhatsApp notification
-        message = f"Hello {visitor.full_name},\n\nYou have been checked out successfully at {time_str}.\n\nVisit ID: {visit.id}\nThank you for visiting!"
-        if visitor.phone_number:
-            send_whatsapp(visitor.phone_number, message)
-            
-    # Telegram Check-Out Alert
-    dept_name = visit.department.name if visit.department else "Unknown"
     visitor_name = visitor.full_name if visitor else "Unknown"
-    checkout_msg = f"🔴 <b>VISITOR CHECKED OUT</b>\n\nVisitor: {visitor_name}\nDepartment: {dept_name}\nGate: {visit.gate_number or 'Unknown'}\nCheck-Out Time: {visit.check_out_time.strftime('%H:%M:%S') if visit.check_out_time else 'Unknown'}"
-    telegram_service.send_security_notification(db, checkout_msg, visit.id)
-    telegram_service.send_department_notification(db, dept_name, checkout_msg, visit.id)
+    time_str = visit.check_out_time.strftime('%Y-%m-%d %H:%M:%S')
+    dept_name = visit.department.name if visit.department else "Unknown"
+
+    background_tasks.add_task(
+        bg_checkout_notifications,
+        visitor_name=visitor_name,
+        time_str=time_str,
+        visitor_email=visitor.email if visitor else None,
+        visitor_phone=visitor.phone_number if visitor else None,
+        visit_id=visit.id,
+        gate_number=visit.gate_number,
+        dept_name=dept_name
+    )
 
     return {
         "success": True,
@@ -665,3 +583,163 @@ def blacklist_visitor(visitor_id: int):
         "success": True,
         "message": "Visitor Blacklisted"
     }
+
+
+# ---------------------------------------------------------
+# BACKGROUND TASK RUNNERS FOR NON-BLOCKING ALERTS
+# ---------------------------------------------------------
+
+def bg_blacklist_alert(blacklist_msg, visitor_id):
+    from app.database.session import SessionLocal
+    db = SessionLocal()
+    try:
+        telegram_service.send_security_notification(db, blacklist_msg, visitor_id)
+        db.commit()
+    except Exception:
+        db.rollback()
+    finally:
+        db.close()
+
+
+def bg_visitor_photo(department, photo_path, name, purpose, target_id):
+    from app.database.session import SessionLocal
+    db = SessionLocal()
+    try:
+        telegram_service.send_visitor_photo(db, department, photo_path, name, purpose, target_id)
+        db.commit()
+    except Exception:
+        db.rollback()
+    finally:
+        db.close()
+
+
+def bg_approval_notifications(visitor_email, visitor_name, visit_date, host_name, badge_path, dept_name, visit_id, card_id):
+    from app.database.session import SessionLocal
+    db = SessionLocal()
+    try:
+        if visitor_email:
+            try:
+                email_body = render_approval_email(
+                    visitor_name=visitor_name,
+                    visit_date=visit_date,
+                    host_name=host_name
+                )
+                send_email(
+                    recipient_email=visitor_email,
+                    subject="Your Visit is Approved - IGL",
+                    body=email_body,
+                    attachment_path=badge_path,
+                    is_html=True
+                )
+            except Exception:
+                pass
+        
+        approve_msg = f"✅ <b>VISITOR APPROVED</b>\n\nVisitor Name: {visitor_name}\nDepartment: {dept_name}\nHost Employee: {host_name}\nVisit ID: {visit_id}\nPass Type: Standard\nDate: {datetime.utcnow().strftime('%Y-%m-%d')}\nTime: {datetime.utcnow().strftime('%H:%M:%S')}"
+        telegram_service.send_admin_notification(db, approve_msg, visit_id)
+        telegram_service.send_department_notification(db, dept_name, approve_msg, visit_id)
+        
+        if badge_path:
+            telegram_service.send_pass_notification(
+                db=db,
+                department=dept_name,
+                pass_path=badge_path,
+                pass_number=card_id or str(visit_id),
+                name=visitor_name,
+                pass_type="Standard",
+                target_id=visit_id
+            )
+        db.commit()
+    except Exception:
+        db.rollback()
+    finally:
+        db.close()
+
+
+def bg_rejection_notifications(visitor_email, visitor_name, visit_id, host_name, rejection_reason, dept_name):
+    from app.database.session import SessionLocal
+    db = SessionLocal()
+    try:
+        if visitor_email:
+            try:
+                send_email(
+                    visitor_email,
+                    "Visit Request Rejected",
+                    f"Hello {visitor_name},\n\nWe regret to inform you that your visit request has been rejected.\n\nVisit ID: {visit_id}\n\nHost Employee:\n{host_name}\n\nReason:\n{rejection_reason}\n\nPlease contact the concerned employee for more details.\n\nThank You,\nVisitor Management Team"
+                )
+            except Exception:
+                pass
+        reject_msg = f"❌ <b>VISITOR REJECTED</b>\n\nVisitor: {visitor_name}\nDepartment: {dept_name}\nReason: {rejection_reason}"
+        telegram_service.send_department_notification(db, dept_name, reject_msg, visit_id)
+        db.commit()
+    except Exception:
+        db.rollback()
+    finally:
+        db.close()
+
+
+def bg_checkin_notifications(visitor_name, time_str, host_name, visitor_email, visit_id, gate_number, dept_name):
+    from app.database.session import SessionLocal
+    db = SessionLocal()
+    try:
+        subject = f"Visitor Checked In: {visitor_name}"
+        email_body = render_checkin_email(
+            visitor_name=visitor_name,
+            checkin_time=time_str,
+            host_name=host_name
+        )
+        
+        if visitor_email:
+            try:
+                send_email(visitor_email, subject, email_body, is_html=True)
+            except Exception:
+                pass
+        try:
+            send_email("security@company.com", subject, email_body, is_html=True)
+        except Exception:
+            pass
+            
+        checkin_msg = f"🟢 <b>VISITOR CHECKED IN</b>\n\nVisitor: {visitor_name}\nDepartment: {dept_name}\nGate: {gate_number}\nCheck-In Time: {time_str}"
+        telegram_service.send_security_notification(db, checkin_msg, visit_id)
+        telegram_service.send_department_notification(db, dept_name, checkin_msg, visit_id)
+        db.commit()
+    except Exception:
+        db.rollback()
+    finally:
+        db.close()
+
+
+def bg_checkout_notifications(visitor_name, time_str, visitor_email, visitor_phone, visit_id, gate_number, dept_name):
+    from app.database.session import SessionLocal
+    db = SessionLocal()
+    try:
+        subject = f"Visitor Checked Out: {visitor_name}"
+        email_body = render_checkout_email(
+            visitor_name=visitor_name,
+            checkout_time=time_str
+        )
+        
+        if visitor_email:
+            try:
+                send_email(visitor_email, subject, email_body, is_html=True)
+            except Exception:
+                pass
+        try:
+            send_email("security@company.com", subject, email_body, is_html=True)
+        except Exception:
+            pass
+            
+        whatsapp_msg = f"Hello {visitor_name},\n\nYou have been checked out successfully at {time_str}.\n\nVisit ID: {visit_id}\nThank you for visiting!"
+        if visitor_phone:
+            try:
+                send_whatsapp(visitor_phone, whatsapp_msg)
+            except Exception:
+                pass
+                
+        checkout_msg = f"🔴 <b>VISITOR CHECKED OUT</b>\n\nVisitor: {visitor_name}\nDepartment: {dept_name}\nGate: {gate_number or 'Unknown'}\nCheck-Out Time: {time_str}"
+        telegram_service.send_security_notification(db, checkout_msg, visit_id)
+        telegram_service.send_department_notification(db, dept_name, checkout_msg, visit_id)
+        db.commit()
+    except Exception:
+        db.rollback()
+    finally:
+        db.close()

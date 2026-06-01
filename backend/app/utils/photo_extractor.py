@@ -17,10 +17,7 @@ def extract_aadhaar_photo(image_path):
         int(w * 0.02):int(w * 0.30)
     ]
 
-    os.makedirs(
-        "uploads/visitor_photos",
-        exist_ok=True
-    )
+
 
     output_path = (
         "uploads/visitor_photos/"

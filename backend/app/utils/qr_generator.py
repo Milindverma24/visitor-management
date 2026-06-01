@@ -4,10 +4,7 @@ import os
 
 def generate_qr(visit_id):
 
-    os.makedirs(
-        "uploads/qrcodes",
-        exist_ok=True
-    )
+
 
     qr_data = f"VISIT_ID:{visit_id}"
 

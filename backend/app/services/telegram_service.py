@@ -77,6 +77,13 @@ def _log_success(db, action: str, target_id: int = None):
     except Exception as e:
         logger.error(f"Failed to log Telegram success: {e}")
 
+def _resolve_recipient_chats(chat_id: str) -> set[str]:
+    """Resolve and sanitize Telegram recipient chat IDs."""
+    chats = {str(c).strip() for c in [chat_id, settings.TELEGRAM_ADMIN_CHAT_ID] if c and str(c).strip()}
+    chats.discard(None)
+    chats.discard("")
+    return chats
+
 
 def send_message(db, chat_id: str, text: str, action_name: str, target_id: int = None):
     """Base function to send a Telegram text message."""
@@ -84,9 +91,7 @@ def send_message(db, chat_id: str, text: str, action_name: str, target_id: int =
         logger.warning(f"Telegram not configured. Skipping {action_name}.")
         return
 
-    chat_ids = {str(c).strip() for c in [chat_id, settings.TELEGRAM_ADMIN_CHAT_ID] if c and str(c).strip()}
-    chat_ids.discard(None)
-    chat_ids.discard("")
+    chat_ids = _resolve_recipient_chats(chat_id)
 
     for target_chat in chat_ids:
         try:
@@ -115,9 +120,7 @@ def send_photo_message(db, chat_id: str, photo_path: str, caption: str, action_n
         logger.error(f"Photo not found at {photo_path}")
         return
 
-    chat_ids = {str(c).strip() for c in [chat_id, settings.TELEGRAM_ADMIN_CHAT_ID] if c and str(c).strip()}
-    chat_ids.discard(None)
-    chat_ids.discard("")
+    chat_ids = _resolve_recipient_chats(chat_id)
 
     for target_chat in chat_ids:
         try:
@@ -147,9 +150,7 @@ def send_document_message(db, chat_id: str, document_path: str, caption: str, ac
         logger.error(f"Document not found at {document_path}")
         return
 
-    chat_ids = {str(c).strip() for c in [chat_id, settings.TELEGRAM_ADMIN_CHAT_ID] if c and str(c).strip()}
-    chat_ids.discard(None)
-    chat_ids.discard("")
+    chat_ids = _resolve_recipient_chats(chat_id)
         
     for target_chat in chat_ids:
         try:

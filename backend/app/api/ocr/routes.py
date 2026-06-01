@@ -25,10 +25,7 @@ async def upload_aadhaar(
     file: UploadFile = File(...)
 ):
 
-    os.makedirs(
-        "uploads/aadhaar",
-        exist_ok=True
-    )
+
 
     file_path = os.path.join(
         "uploads",

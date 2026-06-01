@@ -67,6 +67,18 @@ app = FastAPI(
 os.makedirs("uploads", exist_ok=True)
 app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 
+@app.on_event("startup")
+def startup_event():
+    dirs = [
+        "uploads/visitor_photos",
+        "uploads/photos",
+        "uploads/aadhaar",
+        "uploads/qrcodes",
+        "uploads/badges"
+    ]
+    for d in dirs:
+        os.makedirs(d, exist_ok=True)
+
 app.include_router(visitor_router)
 app.include_router(ocr_router)
 app.include_router(admin_router)

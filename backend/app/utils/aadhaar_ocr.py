@@ -1,11 +1,17 @@
 import easyocr
 import re
+_reader = None
 
-reader = easyocr.Reader(['en'])
+def get_ocr_reader():
+    global _reader
+    if _reader is None:
+        _reader = easyocr.Reader(['en'])
+    return _reader
 
 
 def extract_aadhaar_details(image_path):
 
+    reader = get_ocr_reader()
     result = reader.readtext(image_path)
 
     lines = [item[1].strip() for item in result]

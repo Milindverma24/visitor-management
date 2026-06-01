@@ -6,7 +6,7 @@ from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import landscape, A5
 
 def generate_badge(visit, visitor, qr_path, company_logo="uploads/company_logo.png"):
-    os.makedirs("uploads/badges", exist_ok=True)
+
     pdf_path = f"uploads/badges/visit_{visit.id}.pdf"
     
     # We will use a custom size similar to A5 landscape but tailored for the pass aspect ratio
