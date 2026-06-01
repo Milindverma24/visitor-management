@@ -4,6 +4,7 @@ from reportlab.lib import colors
 from reportlab.lib.utils import ImageReader
 from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import landscape, A5
+from app.utils.timezone import to_ist, get_ist_now
 
 def generate_badge(visit, visitor, qr_path, company_logo="uploads/company_logo.png"):
 
@@ -67,8 +68,8 @@ def generate_badge(visit, visitor, qr_path, company_logo="uploads/company_logo.p
             c.setFont("Helvetica", 11)
             c.drawString(col2_x + 280, y, f": {str(extra_val).upper()}")
             
-    created_str = visit.created_at.strftime("%Y-%m-%d %H:%M") if visit.created_at else datetime.now().strftime("%Y-%m-%d %H:%M")
-    valid_up_to_str = visit.valid_up_to.strftime("%Y-%m-%d %H:%M") if visit.valid_up_to else "N/A"
+    created_str = to_ist(visit.created_at).strftime("%Y-%m-%d %H:%M") if visit.created_at else get_ist_now().strftime("%Y-%m-%d %H:%M")
+    valid_up_to_str = to_ist(visit.valid_up_to).strftime("%Y-%m-%d %H:%M") if visit.valid_up_to else "N/A"
     name_str = f"{visitor.title or ''} {visitor.full_name} ({visitor.category or 'VISITOR'})"
     
     draw_row(start_y, "Card ID", visit.card_id or "N/A")

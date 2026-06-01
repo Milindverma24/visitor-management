@@ -17,6 +17,7 @@ from app.utils.email_service import send_email
 from app.utils.email_templates import render_approval_email, render_checkin_email, render_checkout_email
 from app.utils.whatsapp_service import send_whatsapp
 from app.services import telegram_service
+from app.utils.timezone import to_ist, get_ist_now
 
 import os
 import shutil
@@ -186,7 +187,7 @@ def create_visit(
     if visitor.is_blacklisted:
         
         # Telegram Blacklist Alert
-        blacklist_msg = f"🚨 <b>SECURITY ALERT</b>\n\n<b>BLACKLISTED VISITOR DETECTED</b>\n\nVisitor: {visitor.full_name}\nPhone: {visitor.phone_number}\nDepartment: {request.department}\nTime: {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')}\n\nSecurity Verification Required"
+        blacklist_msg = f"🚨 <b>SECURITY ALERT</b>\n\n<b>BLACKLISTED VISITOR DETECTED</b>\n\nVisitor: {visitor.full_name}\nPhone: {visitor.phone_number}\nDepartment: {request.department}\nTime: {get_ist_now().strftime('%Y-%m-%d %H:%M:%S')}\n\nSecurity Verification Required"
         background_tasks.add_task(bg_blacklist_alert, blacklist_msg, visitor.id)
 
         return {
@@ -343,7 +344,7 @@ def approve_visit(
         bg_approval_notifications,
         visitor_email=visitor.email if visitor else None,
         visitor_name=visitor.full_name if visitor else "Unknown",
-        visit_date=visit.created_at.strftime("%Y-%m-%d %H:%M") if (visit.created_at and hasattr(visit.created_at, "strftime")) else datetime.utcnow().strftime("%Y-%m-%d %H:%M"),
+        visit_date=to_ist(visit.created_at).strftime("%Y-%m-%d %H:%M") if (visit.created_at and hasattr(visit.created_at, "strftime")) else get_ist_now().strftime("%Y-%m-%d %H:%M"),
         host_name=visit.host_employee,
         badge_path=badge_path,
         dept_name=dept_name,
@@ -463,7 +464,7 @@ def checkin_visitor(
 
     visitor = db.query(Visitor).filter(Visitor.id == visit.visitor_id).first()
     visitor_name = visitor.full_name if visitor else "Unknown"
-    time_str = visit.check_in_time.strftime('%Y-%m-%d %H:%M:%S')
+    time_str = to_ist(visit.check_in_time).strftime('%Y-%m-%d %H:%M:%S')
     dept_name = visit.department.name if visit.department else "Unknown"
 
     background_tasks.add_task(
@@ -518,7 +519,7 @@ def checkout_visitor(
 
     visitor = db.query(Visitor).filter(Visitor.id == visit.visitor_id).first()
     visitor_name = visitor.full_name if visitor else "Unknown"
-    time_str = visit.check_out_time.strftime('%Y-%m-%d %H:%M:%S')
+    time_str = to_ist(visit.check_out_time).strftime('%Y-%m-%d %H:%M:%S')
     dept_name = visit.department.name if visit.department else "Unknown"
 
     background_tasks.add_task(
@@ -634,7 +635,7 @@ def bg_approval_notifications(visitor_email, visitor_name, visit_date, host_name
             except Exception:
                 pass
         
-        approve_msg = f"✅ <b>VISITOR APPROVED</b>\n\nVisitor Name: {visitor_name}\nDepartment: {dept_name}\nHost Employee: {host_name}\nVisit ID: {visit_id}\nPass Type: Standard\nDate: {datetime.utcnow().strftime('%Y-%m-%d')}\nTime: {datetime.utcnow().strftime('%H:%M:%S')}"
+        approve_msg = f"✅ <b>VISITOR APPROVED</b>\n\nVisitor Name: {visitor_name}\nDepartment: {dept_name}\nHost Employee: {host_name}\nVisit ID: {visit_id}\nPass Type: Standard\nDate: {get_ist_now().strftime('%Y-%m-%d')}\nTime: {get_ist_now().strftime('%H:%M:%S')}"
         telegram_service.send_admin_notification(db, approve_msg, visit_id)
         telegram_service.send_department_notification(db, dept_name, approve_msg, visit_id)
         
