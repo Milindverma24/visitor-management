@@ -1,0 +1,62 @@
+# Visitor Management System - Command Cheat Sheet
+
+Here are all the necessary commands you will need for starting, stopping, and managing the system. Run all of these from the root folder of the project (`visitor-management-system`).
+
+---
+
+## 🟢 Starting the System
+
+**1. Start the Databases (PostgreSQL & Redis)**
+```bash
+docker compose up -d
+```
+*(The `-d` flag runs them in the background so you can keep using your terminal).*
+
+**2. Start the Application (Backend + Frontend)**
+```bash
+bash start.sh
+```
+*(Keep this terminal open while you are working. The frontend and backend will automatically reload when you save files).*
+
+---
+
+## 🔴 Stopping the System
+
+**1. Stop the Application**
+Go to the terminal where `bash start.sh` is running and press:
+```bash
+Ctrl + C
+```
+
+**2. Stop the Databases**
+To safely stop the database and Redis containers without losing data:
+```bash
+docker compose stop
+```
+
+---
+
+## 🛠️ Advanced Commands
+
+**Restart Databases (if they freeze or act up):**
+```bash
+docker compose restart
+```
+
+**Completely Destroy Databases (⚠️ WARNING: Deletes all data):**
+If you ever want to wipe the entire database and start over fresh:
+```bash
+docker compose down -v
+```
+
+**Re-run Database Creation and Seeds (Python):**
+If you deleted the database and need to set up the tables and fake data again:
+```bash
+cd backend
+source venv/bin/activate
+python create_tables.py
+python seed_departments.py
+python seed_admin.py
+python seed_test_data.py
+python seed_igl_data.py
+```
