@@ -11,8 +11,8 @@ def generate_badge(visit, visitor, qr_path, company_logo="app/static/company_log
     pdf_path = f"uploads/badges/visit_{visit.id}.pdf"
     
     # We will use a custom size similar to A5 landscape but tailored for the pass aspect ratio
-    # 700 width, 450 height
-    width, height = 700, 480
+    # 700 width, 520 height
+    width, height = 700, 520
     c = canvas.Canvas(pdf_path, pagesize=(width, height))
     
     # ---------------------------------------------------------
@@ -86,9 +86,9 @@ def generate_badge(visit, visitor, qr_path, company_logo="app/static/company_log
     # ---------------------------------------------------------
     # Right Column: Photo & QR Code
     # ---------------------------------------------------------
-    photo_x = width - margin - 180
-    photo_y = start_y - 120
-    photo_size = 140
+    photo_size = 130
+    photo_x = width - margin - photo_size - 20
+    photo_y = 435 - 15 - photo_size  # 290
     
     # Draw photo box
     c.setLineWidth(2)
@@ -104,51 +104,46 @@ def generate_badge(visit, visitor, qr_path, company_logo="app/static/company_log
         except Exception:
             c.setFillColor(colors.lightgrey)
             c.setFont("Helvetica-Bold", 14)
-            c.drawString(photo_x + 40, photo_y + 65, "PHOTO")
+            c.drawString(photo_x + 35, photo_y + 60, "PHOTO")
     
-    qr_y = photo_y - photo_size - 20
+    qr_size = 130
+    qr_y = photo_y - 15 - qr_size  # 145
     c.setFillColor(colors.white)
-    c.rect(photo_x, qr_y, photo_size, photo_size, fill=1, stroke=1)
+    c.rect(photo_x, qr_y, qr_size, qr_size, fill=1, stroke=1)
     
     if qr_path and os.path.exists(qr_path):
         try:
-            c.drawImage(qr_path, photo_x + 10, qr_y + 10, width=photo_size-20, height=photo_size-20)
+            c.drawImage(qr_path, photo_x + 10, qr_y + 10, width=qr_size-20, height=qr_size-20)
         except Exception:
             pass
             
     # ---------------------------------------------------------
     # Notes & Signatures Section (Bottom)
     # ---------------------------------------------------------
-    notes_y = margin + 70
     c.setLineWidth(2)
-    c.line(margin, notes_y + 10, width - margin, notes_y + 10)
+    c.line(margin, 135, width - margin, 135)
     
-    # Notes
+    # Notes (Left side)
     c.setFillColor(colors.black)
     c.setFont("Helvetica-Bold", 10)
-    c.drawString(margin + 20, notes_y - 10, "Note:")
+    c.drawString(margin + 20, 115, "Note:")
     c.setFont("Helvetica", 9)
-    notes = [
-        "1. Please return the pass before leaving.",
-        "2. In case of emergency please call reception at '8' extn.",
-        "3. I am Entering in this plant at my own risk.",
-        "4. It has been told where to use the mobile phone and where not to use it."
-    ]
-    ny = notes_y - 25
-    for note in notes:
-        c.drawString(margin + 20, ny, note)
-        ny -= 12
-        
-    # Signatures
-    sig_y = margin + 15
-    c.setFont("Helvetica-Bold", 11)
-    c.drawString(width - 400, sig_y, "Sign: Visitor")
-    c.drawString(width - 300, sig_y, "Auth")
-    c.drawString(width - 220, sig_y, "Host")
     
-    c.drawString(width - 120, sig_y + 20, "Security")
+    c.drawString(margin + 20, 98, "1. Please return the pass before leaving.")
+    c.drawString(margin + 20, 83, "2. In case of emergency please call reception at '8' extn.")
+    c.drawString(margin + 20, 68, "3. I am Entering in this plant at my own risk.")
+    c.drawString(margin + 20, 53, "4. It has been told where to use the mobile phone")
+    c.drawString(margin + 20, 38, "   and where not to use it.")
+        
+    # Signatures (Right side, non-overlapping)
+    c.setFont("Helvetica-Bold", 10)
+    c.drawString(360, 45, "Sign: Visitor")
+    c.drawString(450, 45, "Auth")
+    c.drawString(530, 45, "Host")
+    
+    c.drawString(600, 65, "Security")
     c.setFont("Helvetica", 9)
-    c.drawString(width - 130, sig_y, "OutTime: _________")
+    c.drawString(590, 45, "OutTime: _________")
 
     c.save()
     return pdf_path

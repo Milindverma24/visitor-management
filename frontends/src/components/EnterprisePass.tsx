@@ -115,7 +115,7 @@ export const EnterprisePass: React.FC<EnterprisePassProps> = ({ visit, photoUrl 
         <div className="mt-auto pt-4 border-t-2 border-black">
           <div className="flex flex-col sm:flex-row justify-between gap-4">
             {/* Notes */}
-            <div className="text-xs max-w-[60%] leading-tight font-medium">
+            <div className="text-xs w-full sm:w-5/12 leading-tight font-medium">
               <span className="font-bold underline">Note:</span>
               <ol className="list-decimal pl-4 mt-1 space-y-0.5">
                 <li>Please return the pass before leaving.</li>
@@ -126,13 +126,13 @@ export const EnterprisePass: React.FC<EnterprisePassProps> = ({ visit, photoUrl 
             </div>
 
             {/* Signatures */}
-            <div className="flex-1 flex items-end justify-between text-sm font-bold pb-2 gap-2">
+            <div className="w-full sm:w-7/12 flex items-end justify-between text-xs sm:text-sm font-bold pb-2 gap-2">
               <div className="text-center w-full">Sign : Visitor</div>
               <div className="text-center w-full">Auth</div>
               <div className="text-center w-full">Host</div>
               <div className="text-center w-full flex flex-col items-center">
                 <span>Security</span>
-                <span className="text-xs font-normal mt-1 border-b border-black border-dashed min-w-[80px]">OutTime:</span>
+                <span className="text-[10px] sm:text-xs font-normal mt-1 border-b border-black border-dashed min-w-[70px] sm:min-w-[80px]">OutTime:</span>
               </div>
             </div>
           </div>
