@@ -30,7 +30,7 @@ const AuditLogs = () => {
   const filteredLogs = logs.filter(log => 
     (log.user_email || "").toLowerCase().includes(searchQuery.toLowerCase()) || 
     (log.action || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
-    (log.visit_id ? log.visit_id.toString() : "").toLowerCase().includes(searchQuery.toLowerCase())
+    (log.target_id ? log.target_id.toString() : "").toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   return (
@@ -55,8 +55,8 @@ const AuditLogs = () => {
               <TableRow>
                 <TableHead>User</TableHead>
                 <TableHead>Action</TableHead>
-                <TableHead>Visit ID</TableHead>
-                <TableHead>IP Address</TableHead>
+                <TableHead>Visitor ID</TableHead>
+                <TableHead>Employee ID</TableHead>
                 <TableHead>Timestamp</TableHead>
               </TableRow>
             </TableHeader>
@@ -67,10 +67,10 @@ const AuditLogs = () => {
                   <TableCell>{log.action}</TableCell>
                   <TableCell>
                     <span className="inline-flex items-center rounded-md bg-slate-100 px-2 py-1 text-xs font-medium text-slate-600 ring-1 ring-inset ring-slate-500/10">
-                      {log.visit_id ? `VST-${log.visit_id}` : 'N/A'}
+                      {log.target_id ? `VST-${log.target_id}` : 'N/A'}
                     </span>
                   </TableCell>
-                  <TableCell className="text-slate-500 font-mono text-xs">{log.ip_address}</TableCell>
+                  <TableCell className="text-slate-500 font-mono text-xs">{log.employee_id || 'N/A'}</TableCell>
                   <TableCell className="text-slate-500">{new Date(log.created_at).toLocaleString()}</TableCell>
                 </TableRow>
               ))}

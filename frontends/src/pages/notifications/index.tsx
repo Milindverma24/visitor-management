@@ -9,7 +9,7 @@ interface TelegramLog {
   action: string;
   target_id: number | null;
   target_type: string | null;
-  ip_address: string | null;
+  employee_id: string | null;
   created_at: string;
 }
 
