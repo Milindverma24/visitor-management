@@ -6,7 +6,7 @@ from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import landscape, A5
 from app.utils.timezone import to_ist, get_ist_now
 
-def generate_badge(visit, visitor, qr_path, company_logo="uploads/company_logo.png"):
+def generate_badge(visit, visitor, qr_path, company_logo="app/static/company_logo.png"):
 
     pdf_path = f"uploads/badges/visit_{visit.id}.pdf"
     

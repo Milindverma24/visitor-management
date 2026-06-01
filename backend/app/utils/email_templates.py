@@ -99,7 +99,7 @@ CHECKOUT_TEMPLATE = """
 </html>
 """
 
-def render_approval_email(visitor_name: str, visit_date: str, host_name: str, company_logo_url: str = "http://127.0.0.1:8001/uploads/company_logo.png") -> str:
+def render_approval_email(visitor_name: str, visit_date: str, host_name: str, company_logo_url: str = "https://res.cloudinary.com/dngurjsdw/image/upload/v1780343367/logo1_1_giuuki.png") -> str:
     template = Template(APPROVAL_TEMPLATE)
     return template.render(
         visitor_name=visitor_name,
@@ -108,7 +108,7 @@ def render_approval_email(visitor_name: str, visit_date: str, host_name: str, co
         company_logo_url=company_logo_url
     )
 
-def render_checkin_email(visitor_name: str, checkin_time: str, host_name: str, company_logo_url: str = "http://127.0.0.1:8001/uploads/company_logo.png") -> str:
+def render_checkin_email(visitor_name: str, checkin_time: str, host_name: str, company_logo_url: str = "https://res.cloudinary.com/dngurjsdw/image/upload/v1780343367/logo1_1_giuuki.png") -> str:
     template = Template(CHECKIN_TEMPLATE)
     return template.render(
         visitor_name=visitor_name,
@@ -117,7 +117,7 @@ def render_checkin_email(visitor_name: str, checkin_time: str, host_name: str, c
         company_logo_url=company_logo_url
     )
 
-def render_checkout_email(visitor_name: str, checkout_time: str, company_logo_url: str = "http://127.0.0.1:8001/uploads/company_logo.png") -> str:
+def render_checkout_email(visitor_name: str, checkout_time: str, company_logo_url: str = "https://res.cloudinary.com/dngurjsdw/image/upload/v1780343367/logo1_1_giuuki.png") -> str:
     template = Template(CHECKOUT_TEMPLATE)
     return template.render(
         visitor_name=visitor_name,

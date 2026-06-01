@@ -325,7 +325,7 @@ def approve_visit(
         visit=visit,
         visitor=visitor,
         qr_path=qr_path,
-        company_logo="uploads/company_logo.png"
+        company_logo="app/static/company_logo.png"
     )
 
     create_audit_log(
