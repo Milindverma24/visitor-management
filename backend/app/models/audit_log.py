@@ -47,7 +47,7 @@ class AuditLog(Base):
         nullable=True
     )
 
-    ip_address = Column(
+    employee_id = Column(
         String(100),
         nullable=True
     )

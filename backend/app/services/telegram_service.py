@@ -47,8 +47,8 @@ def _handle_failure(db, action: str, error: Exception, fallback_subject: str, fa
             db=db,
             user_email="system@telegram_bot",
             action="TELEGRAM_MESSAGE_FAILED",
-            visit_id=None,
-            ip_address="127.0.0.1"
+            visitor_id=None,
+            employee_id="SYSTEM"
         )
     except Exception as e:
         logger.error(f"Failed to write to audit log: {e}")
@@ -67,15 +67,23 @@ def _handle_failure(db, action: str, error: Exception, fallback_subject: str, fa
 
 def _log_success(db, action: str, target_id: int = None):
     try:
+        from app.models.visit import Visit
+        visitor_id = None
+        if target_id:
+            visit = db.query(Visit).filter(Visit.id == target_id).first()
+            if visit:
+                visitor_id = visit.visitor_id
+                
         create_audit_log(
             db=db,
             user_email="system@telegram_bot",
-            action="TELEGRAM_MESSAGE_SENT",
-            visit_id=target_id,
-            ip_address="127.0.0.1"
+            action=action,
+            visitor_id=visitor_id,
+            employee_id="SYSTEM"
         )
     except Exception as e:
         logger.error(f"Failed to log Telegram success: {e}")
+
 
 def _resolve_recipient_chats(chat_id: str) -> set[str]:
     """Resolve and sanitize Telegram recipient chat IDs."""

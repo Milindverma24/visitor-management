@@ -290,7 +290,8 @@ def get_all_visits(user: dict = Depends(get_current_user)):
 def approve_visit(
     visit_id: int,
     request: Request,
-    background_tasks: BackgroundTasks
+    background_tasks: BackgroundTasks,
+    user: dict = Depends(get_current_user)
 ):
 
     db: Session = SessionLocal()
@@ -328,12 +329,17 @@ def approve_visit(
         company_logo="app/static/company_logo.png"
     )
 
+    from app.models.user import User
+    executing_user = db.query(User).filter(User.id == user.get("user_id")).first()
+    emp_id = executing_user.employee_id if (executing_user and executing_user.employee_id) else "SYSTEM"
+    user_email = user.get("sub")
+
     create_audit_log(
         db=db,
-        user_email="milind1@example.com",
+        user_email=user_email,
         action="APPROVED_VISIT",
-        visit_id=visit.id,
-        ip_address=request.client.host
+        visitor_id=visit.visitor_id,
+        employee_id=emp_id
     )
 
     db.commit()
@@ -364,7 +370,8 @@ def approve_visit(
 def reject_visit(
     visit_id: int,
     request: Request,
-    background_tasks: BackgroundTasks
+    background_tasks: BackgroundTasks,
+    user: dict = Depends(get_current_user)
 ):
 
     db: Session = SessionLocal()
@@ -385,12 +392,17 @@ def reject_visit(
     visit.status = "REJECTED"
     visit.rejection_reason = "Rejected By Admin"
 
+    from app.models.user import User
+    executing_user = db.query(User).filter(User.id == user.get("user_id")).first()
+    emp_id = executing_user.employee_id if (executing_user and executing_user.employee_id) else "SYSTEM"
+    user_email = user.get("sub")
+
     create_audit_log(
         db=db,
-        user_email="milind1@example.com",
+        user_email=user_email,
         action="REJECTED_VISIT",
-        visit_id=visit.id,
-        ip_address=request.client.host
+        visitor_id=visit.visitor_id,
+        employee_id=emp_id
     )
 
     db.commit()
@@ -425,7 +437,8 @@ def reject_visit(
 def checkin_visitor(
     visit_id: int,
     request: Request,
-    background_tasks: BackgroundTasks
+    background_tasks: BackgroundTasks,
+    user: dict = Depends(get_current_user)
 ):
 
     db: Session = SessionLocal()
@@ -452,12 +465,17 @@ def checkin_visitor(
     visit.checked_in_by = "Security Guard 1"
     visit.gate_number = "Gate-1"
 
+    from app.models.user import User
+    executing_user = db.query(User).filter(User.id == user.get("user_id")).first()
+    emp_id = executing_user.employee_id if (executing_user and executing_user.employee_id) else "SYSTEM"
+    user_email = user.get("sub")
+
     create_audit_log(
         db=db,
-        user_email="security@company.com",
+        user_email=user_email,
         action="CHECK_IN",
-        visit_id=visit.id,
-        ip_address=request.client.host
+        visitor_id=visit.visitor_id,
+        employee_id=emp_id
     )
 
     db.commit()
@@ -488,7 +506,8 @@ def checkin_visitor(
 def checkout_visitor(
     visit_id: int,
     request: Request,
-    background_tasks: BackgroundTasks
+    background_tasks: BackgroundTasks,
+    user: dict = Depends(get_current_user)
 ):
 
     db: Session = SessionLocal()
@@ -507,12 +526,17 @@ def checkout_visitor(
     visit.check_out_time = datetime.utcnow()
     visit.checked_out_by = "Security Guard 1"
 
+    from app.models.user import User
+    executing_user = db.query(User).filter(User.id == user.get("user_id")).first()
+    emp_id = executing_user.employee_id if (executing_user and executing_user.employee_id) else "SYSTEM"
+    user_email = user.get("sub")
+
     create_audit_log(
         db=db,
-        user_email="security@company.com",
+        user_email=user_email,
         action="CHECK_OUT",
-        visit_id=visit.id,
-        ip_address=request.client.host
+        visitor_id=visit.visitor_id,
+        employee_id=emp_id
     )
 
     db.commit()

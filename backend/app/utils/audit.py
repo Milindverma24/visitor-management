@@ -5,16 +5,16 @@ def create_audit_log(
     db,
     user_email,
     action,
-    visit_id,
-    ip_address
+    visitor_id,
+    employee_id
 ):
 
     log = AuditLog(
         user_email=user_email,
         action=action,
-        target_id=visit_id,
-        target_type="Visit",
-        ip_address=ip_address
+        target_id=visitor_id,
+        target_type="Visitor",
+        employee_id=employee_id
     )
 
     db.add(log)
