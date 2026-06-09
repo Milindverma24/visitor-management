@@ -85,11 +85,12 @@ def _log_success(db, action: str, target_id: int = None):
         logger.error(f"Failed to log Telegram success: {e}")
 
 
-def _resolve_recipient_chats(chat_id: str) -> set[str]:
+def _resolve_recipient_chats(chat_ids_list: list[str]) -> set[str]:
     """Resolve and sanitize Telegram recipient chat IDs."""
-    chats = {str(c).strip() for c in [chat_id, settings.TELEGRAM_ADMIN_CHAT_ID] if c and str(c).strip()}
-    chats.discard(None)
-    chats.discard("")
+    chats = set()
+    for c in chat_ids_list:
+        if c and str(c).strip():
+            chats.add(str(c).strip())
     return chats
 
 
@@ -99,7 +100,7 @@ def send_message(db, chat_id: str, text: str, action_name: str, target_id: int =
         logger.warning(f"Telegram not configured. Skipping {action_name}.")
         return
 
-    chat_ids = _resolve_recipient_chats(chat_id)
+    chat_ids = _resolve_recipient_chats([chat_id])
 
     for target_chat in chat_ids:
         try:
@@ -128,7 +129,7 @@ def send_photo_message(db, chat_id: str, photo_path: str, caption: str, action_n
         logger.error(f"Photo not found at {photo_path}")
         return
 
-    chat_ids = _resolve_recipient_chats(chat_id)
+    chat_ids = _resolve_recipient_chats([chat_id])
 
     for target_chat in chat_ids:
         try:
@@ -148,7 +149,7 @@ def send_photo_message(db, chat_id: str, photo_path: str, caption: str, action_n
             _handle_failure(db, action_name, e, action_name, caption)
 
 
-def send_document_message(db, chat_id: str, document_path: str, caption: str, action_name: str, target_id: int = None):
+def send_document_message(db, chat_ids_list: list[str], document_path: str, caption: str, action_name: str, target_id: int = None):
     """Base function to send a document (e.g., PDF) to Telegram."""
     if not settings.TELEGRAM_BOT_TOKEN:
         logger.warning(f"Telegram not configured. Skipping {action_name}.")
@@ -158,7 +159,7 @@ def send_document_message(db, chat_id: str, document_path: str, caption: str, ac
         logger.error(f"Document not found at {document_path}")
         return
 
-    chat_ids = _resolve_recipient_chats(chat_id)
+    chat_ids = _resolve_recipient_chats(chat_ids_list)
         
     for target_chat in chat_ids:
         try:
@@ -205,7 +206,7 @@ def send_visitor_photo(db, department: str, photo_path: str, name: str, purpose:
     send_photo_message(db, chat_id, photo_path, caption, "TELEGRAM_PHOTO_SENT", target_id)
 
 
-def send_pass_notification(db, department: str, pass_path: str, pass_number: str, name: str, pass_type: str, target_id: int = None):
-    chat_id = _get_chat_id(department)
+def send_pass_notification(db, departments: list[str], pass_path: str, pass_number: str, name: str, pass_type: str, target_id: int = None):
+    chat_ids = [_get_chat_id(d) for d in departments]
     caption = f"🎫 <b>PASS GENERATED</b>\n\nPass Number: {pass_number}\nVisitor: {name}\nPass Type: {pass_type}\nQR Generated: Yes"
-    send_document_message(db, chat_id, pass_path, caption, "TELEGRAM_PASS_SENT", target_id)
+    send_document_message(db, chat_ids, pass_path, caption, "TELEGRAM_PASS_SENT", target_id)

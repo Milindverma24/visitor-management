@@ -31,8 +31,8 @@ def get_user_by_email(email: str):
     db.close()
     return user
 
-hr_manager = get_user_by_email("hr@vms.com")
-it_manager = get_user_by_email("it@vms.com")
+hr_manager = get_user_by_email("ultimate@igl.com")
+it_manager = get_user_by_email("security.guard@igl.com")
 
 names = [
     "Alice Smith", "Bob Johnson", "Charlie Lee", "Diana Patel",

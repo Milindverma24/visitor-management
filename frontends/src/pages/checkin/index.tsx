@@ -8,7 +8,7 @@ import { CheckSquare, Search, Camera, CameraOff } from "lucide-react";
 import toast from "react-hot-toast";
 
 import api from "@/services/api";
-import { checkInVisit } from "@/services/visitService";
+import { getVisits, checkInVisit, expireVisit } from "@/services/visitService";
 import { QRScanner } from "@/components/ui/QRScanner";
 
 const CheckIn = () => {
@@ -66,8 +66,19 @@ const CheckIn = () => {
       await checkInVisit(id);
       setVisits((prevVisits) => prevVisits.filter(v => v.id !== id));
       toast.success("Visitor checked in successfully!");
+    } catch (error: any) {
+      const errMsg = error.response?.data?.detail || "Failed to check in visitor";
+      toast.error(errMsg);
+    }
+  };
+
+  const handleExpire = async (id: number) => {
+    try {
+      await expireVisit(id);
+      setVisits((prevVisits) => prevVisits.filter(v => v.id !== id));
+      toast.success("Expired pass removed successfully!");
     } catch (error) {
-      toast.error("Failed to check in visitor");
+      toast.error("Failed to remove expired pass");
     }
   };
 
@@ -83,8 +94,9 @@ const CheckIn = () => {
             await checkInVisit(visitId);
             setVisits((prevVisits) => prevVisits.filter(v => v.id !== visitId));
             toast.success(`Automated Check-in successful for ${visit.visitorName}!`, { duration: 4000 });
-          } catch (error) {
-            toast.error("Failed to check in visitor automatically.");
+          } catch (error: any) {
+            const errMsg = error.response?.data?.detail || "Failed to check in visitor automatically.";
+            toast.error(errMsg);
           }
         } else {
           toast.error(`Visit ID ${visitId} is not approved or already checked in.`, { id: "scan-err" });
@@ -110,14 +122,14 @@ const CheckIn = () => {
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center mb-6">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
         <div>
           <h1 className="text-2xl font-bold text-slate-800">Check-In Management</h1>
           <p className="text-slate-500 text-sm">Approve and verify arriving visitors manually or via QR scan</p>
         </div>
         <Button 
           onClick={() => setIsScanning(!isScanning)} 
-          className={isScanning ? "bg-red-600 hover:bg-red-700 text-white shadow-md" : "bg-blue-600 hover:bg-blue-700 text-white shadow-md"}
+          className={isScanning ? "bg-red-600 hover:bg-red-700 text-white shadow-md w-full sm:w-auto" : "bg-blue-600 hover:bg-blue-700 text-white shadow-md w-full sm:w-auto"}
         >
           {isScanning ? (
             <><CameraOff className="w-4 h-4 mr-2" /> Stop Scanner</>
@@ -144,11 +156,11 @@ const CheckIn = () => {
       )}
 
       <Card>
-        <CardHeader className="flex flex-row items-center justify-between pb-4">
+        <CardHeader className="flex flex-col sm:flex-row items-start sm:items-center justify-between pb-4 gap-4">
           <CardTitle>Manual Visitor Check-In</CardTitle>
-          <div className="flex items-center gap-4">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full sm:w-auto">
             <select
-              className="border-slate-300 rounded-md text-sm py-2 px-3 focus:ring-primary focus:border-primary border bg-white text-slate-700"
+              className="border-slate-300 rounded-md text-sm py-2 px-3 focus:ring-primary focus:border-primary border bg-white text-slate-700 w-full sm:w-auto"
               value={sortOrder}
               onChange={(e) => setSortOrder(e.target.value)}
             >
@@ -156,60 +168,68 @@ const CheckIn = () => {
               <option value="oldest">Oldest First</option>
               <option value="name">Name (A-Z)</option>
             </select>
-            <div className="relative w-64 mt-0">
+            <div className="relative w-full sm:w-64 mt-0">
               <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-500" />
               <Input 
                 type="search" 
                 placeholder="Search by name, ID, phone..." 
-                className="pl-9 m-0"
+                className="pl-9 m-0 w-full"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
               />
             </div>
           </div>
         </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Visitor ID</TableHead>
-                <TableHead>Visitor Name</TableHead>
-                <TableHead>Company</TableHead>
-                <TableHead>Purpose</TableHead>
-                <TableHead>Host Employee</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filteredVisits.map((visit) => (
-                <TableRow key={visit.id}>
-                  <TableCell className="font-semibold text-slate-700">{visit.cardId}</TableCell>
-                  <TableCell className="font-medium">{visit.visitorName}</TableCell>
-                  <TableCell>{visit.company}</TableCell>
-                  <TableCell>{visit.purpose}</TableCell>
-                  <TableCell>{visit.hostEmployee}</TableCell>
-                  <TableCell>
-                    <Badge variant="success">
-                      {visit.status}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <Button size="sm" onClick={() => handleCheckIn(visit.id)}>
-                      <CheckSquare className="h-4 w-4 mr-1" /> Check In
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              ))}
-              {filteredVisits.length === 0 && !isLoading && (
+        <CardContent className="p-0">
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center py-6 text-slate-500">
-                    No approved visitors pending check-in.
-                  </TableCell>
+                  <TableHead className="whitespace-nowrap">Visitor ID</TableHead>
+                  <TableHead className="whitespace-nowrap">Visitor Name</TableHead>
+                  <TableHead className="whitespace-nowrap">Company</TableHead>
+                  <TableHead className="whitespace-nowrap">Purpose</TableHead>
+                  <TableHead className="whitespace-nowrap">Host Employee</TableHead>
+                  <TableHead className="whitespace-nowrap">Status</TableHead>
+                  <TableHead className="text-right whitespace-nowrap">Actions</TableHead>
                 </TableRow>
-              )}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {filteredVisits.map((visit) => (
+                  <TableRow key={visit.id}>
+                    <TableCell className="font-semibold text-slate-700 whitespace-nowrap">{visit.cardId}</TableCell>
+                    <TableCell className="font-medium whitespace-normal break-words">{visit.visitorName}</TableCell>
+                    <TableCell className="whitespace-normal break-words">{visit.company}</TableCell>
+                    <TableCell className="whitespace-normal break-words">{visit.purpose}</TableCell>
+                    <TableCell className="whitespace-normal break-words">{visit.hostEmployee}</TableCell>
+                    <TableCell className="whitespace-nowrap">
+                      <Badge variant={visit.status === 'EXPIRED' ? 'destructive' : 'success'}>
+                        {visit.status}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-right whitespace-nowrap">
+                      {visit.status === 'EXPIRED' ? (
+                        <Button size="sm" variant="outline" className="text-red-600 border-red-200 hover:bg-red-50" onClick={() => handleExpire(visit.id)}>
+                          <CheckSquare className="h-4 w-4 mr-1 hidden" /> Remove
+                        </Button>
+                      ) : (
+                        <Button size="sm" onClick={() => handleCheckIn(visit.id)}>
+                          <CheckSquare className="h-4 w-4 mr-1" /> Check In
+                        </Button>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                ))}
+                {filteredVisits.length === 0 && !isLoading && (
+                  <TableRow>
+                    <TableCell colSpan={7} className="text-center py-6 text-slate-500">
+                      No approved visitors pending check-in.
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </div>
         </CardContent>
       </Card>
     </div>

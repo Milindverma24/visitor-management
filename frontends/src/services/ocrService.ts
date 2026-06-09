@@ -1,14 +1,17 @@
+import axios from "axios";
 import api from "./api";
 
 export const uploadAadhaar = (
   formData: FormData
-) =>
-  api.post(
+) => {
+  const token = localStorage.getItem("token");
+  return axios.post(
     "/api/ocr/aadhaar",
     formData,
     {
       headers: {
-        "Content-Type": "multipart/form-data"
+        ...(token ? { Authorization: `Bearer ${token}` } : {})
       }
     }
   );
+};

@@ -16,7 +16,15 @@ dept_data = [
     {"name": "Information Technology", "code": "IT"},
     {"name": "Administration", "code": "ADMIN"},
     {"name": "Security", "code": "SEC"},
-    {"name": "Reception", "code": "REC"}
+    {"name": "Reception", "code": "REC"},
+    {"name": "Production", "code": "PROD"},
+    {"name": "Maintenance", "code": "MAINT"},
+    {"name": "Safety", "code": "SAFE"},
+    {"name": "Finance", "code": "FIN"},
+    {"name": "Sales", "code": "SALES"},
+    {"name": "Marketing", "code": "MKTG"},
+    {"name": "Legal", "code": "LGL"},
+    {"name": "Operations", "code": "OPS"}
 ]
 
 departments = {}
@@ -31,15 +39,22 @@ for d in dept_data:
 
 # 2. Create Users
 users_data = [
-    {"email": "superadmin@igl.com", "name": "System Administrator", "role": "SUPER_ADMIN", "dept": "IT"},
-    {"email": "admin@igl.com", "name": "General Admin", "role": "ADMIN", "dept": "ADMIN"},
-    {"email": "security.head@igl.com", "name": "Security Chief", "role": "SECURITY", "dept": "SEC"},
-    {"email": "reception@igl.com", "name": "Front Desk", "role": "RECEPTION", "dept": "REC"},
-    {"email": "hr.head@igl.com", "name": "HR Director", "role": "HR_MANAGER", "dept": "HR"},
-    {"email": "hr.member@igl.com", "name": "HR Executive", "role": "EMPLOYEE", "dept": "HR"},
-    {"email": "it.head@igl.com", "name": "IT Director", "role": "DEPARTMENT_HEAD", "dept": "IT"},
-    {"email": "it.member@igl.com", "name": "IT Support", "role": "EMPLOYEE", "dept": "IT"},
+    {"email": "ultimate@igl.com", "name": "Ultimate System Admin", "role": "CORPORATE_SUPER_ADMIN", "dept": "IT"},
+    {"email": "security.guard@igl.com", "name": "Security Guard 1", "role": "CORPORATE_SUPER_ADMIN", "dept": "SEC"},
 ]
+
+# Keep only seeded users
+kept_emails = [u["email"] for u in users_data]
+all_users = db.query(User).all()
+for user in all_users:
+    if user.email not in kept_emails:
+        # Clear references in departments
+        db.query(Department).filter(Department.head_user_id == user.id).update({Department.head_user_id: None})
+        # Clear manager references
+        db.query(User).filter(User.reporting_manager_id == user.id).update({User.reporting_manager_id: None})
+        # Delete user
+        db.delete(user)
+db.commit()
 
 for u in users_data:
     user = db.query(User).filter(User.email == u["email"]).first()
@@ -55,35 +70,5 @@ for u in users_data:
         db.add(user)
 db.commit()
 
-# 3. Create IGL Visitors
-names = ["Ramesh Kumar", "Suresh Singh", "Priya Sharma", "Neha Gupta", "Amit Patel"]
-for i in range(5):
-    visitor = Visitor(
-        full_name=names[i],
-        phone_number=f"+91-98765{random.randint(1000,9999)}",
-        email=f"{names[i].split()[0].lower()}@example.com",
-        title="Consultant",
-        purpose="Project Discussion",
-        company="Vendor Corp"
-    )
-    db.add(visitor)
-    db.flush()
-    
-    visit = Visit(
-        visitor_id=visitor.id,
-        host_employee="IT Director" if i % 2 == 0 else "HR Director",
-        department_id=departments["IT"].id if i % 2 == 0 else departments["HR"].id,
-        pass_type=PassType.VISITOR_PASS,
-        purpose="Project Discussion",
-        status="APPROVED",
-        arrival_date=datetime.utcnow() + timedelta(days=i),
-        check_in_time=datetime.utcnow() + timedelta(days=i, minutes=5),
-        check_out_time=datetime.utcnow() + timedelta(days=i, hours=2),
-        approved_by="System Administrator",
-        approved_at=datetime.utcnow()
-    )
-    db.add(visit)
-
-db.commit()
 db.close()
-print("IGL Seed Data Created Successfully.")
+print("IGL Seed Data Created/Cleaned Successfully.")

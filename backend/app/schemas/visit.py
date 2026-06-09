@@ -14,3 +14,4 @@ class VisitCreate(BaseModel):
     accessories: str | None = None
     valid_up_to: datetime | None = None
     accompanied_by_count: int | None = 0
+    pass_type: str | None = "VISITOR_PASS"

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/Table";
+import { DataTable } from "@/components/ui/DataTable";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/Card";
@@ -12,7 +12,6 @@ import api from "@/services/api";
 const VisitorDirectory = () => {
   const [visitors, setVisitors] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [searchQuery, setSearchQuery] = useState("");
 
   const fetchVisitors = async () => {
     try {
@@ -43,72 +42,63 @@ const VisitorDirectory = () => {
     }
   };
 
-  const filteredVisitors = visitors.filter(v => 
-    (v.full_name || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
-    (v.phone_number || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
-    (v.email || "").toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const filteredVisitors = visitors;
 
   return (
     <div className="space-y-6">
       <Card>
         <CardHeader className="flex flex-row items-center justify-between pb-4">
           <CardTitle>Visitor Directory</CardTitle>
-          <div className="relative w-64 mt-0">
-            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-500" />
-            <Input 
-              type="search" 
-              placeholder="Search visitors..." 
-              className="pl-9 m-0"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-            />
-          </div>
         </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Name</TableHead>
-                <TableHead>Phone</TableHead>
-                <TableHead>Email</TableHead>
-                <TableHead>Company</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filteredVisitors.map((visitor) => (
-                <TableRow key={visitor.id}>
-                  <TableCell className="font-medium">{visitor.full_name}</TableCell>
-                  <TableCell>{visitor.phone_number}</TableCell>
-                  <TableCell>{visitor.email}</TableCell>
-                  <TableCell>{visitor.company}</TableCell>
-                  <TableCell>
-                    {visitor.is_blacklisted ? (
-                      <Badge variant="danger">BLACKLISTED</Badge>
-                    ) : (
-                      <Badge variant="success">ACTIVE</Badge>
-                    )}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    {!visitor.is_blacklisted && (
-                      <Button size="sm" variant="outline" className="text-red-600 border-red-200 hover:bg-red-50" onClick={() => handleBlacklist(visitor.id)}>
-                        <ShieldAlert className="h-4 w-4 mr-1" /> Blacklist
-                      </Button>
-                    )}
-                  </TableCell>
-                </TableRow>
-              ))}
-              {filteredVisitors.length === 0 && !isLoading && (
-                <TableRow>
-                  <TableCell colSpan={6} className="text-center py-6 text-slate-500">
-                    No visitors found.
-                  </TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
+        <CardContent className="p-0">
+          <DataTable
+            data={filteredVisitors}
+            filename="visitor_directory"
+            searchPlaceholder="Search visitors..."
+            columns={[
+              {
+                header: "Name",
+                accessorKey: "full_name",
+                cell: (row: any) => <span className="font-medium">{row.full_name}</span>
+              },
+              {
+                header: "Phone",
+                accessorKey: "phone_number",
+                nowrap: true
+              },
+              {
+                header: "Email",
+                accessorKey: "email"
+              },
+              {
+                header: "Company",
+                accessorKey: "company"
+              },
+              {
+                header: "Status",
+                accessorKey: "is_blacklisted",
+                nowrap: true,
+                cell: (row: any) => row.is_blacklisted ? (
+                  <Badge variant="danger">BLACKLISTED</Badge>
+                ) : (
+                  <Badge variant="success">ACTIVE</Badge>
+                )
+              },
+              {
+                header: "Actions",
+                accessorKey: "actions",
+                sortable: false,
+                nowrap: true,
+                cell: (row: any) => !row.is_blacklisted && (
+                  <div className="text-right">
+                    <Button size="sm" variant="outline" className="text-red-600 border-red-200 hover:bg-red-50" onClick={(e) => { e.stopPropagation(); handleBlacklist(row.id); }}>
+                      <ShieldAlert className="h-4 w-4 mr-1" /> Blacklist
+                    </Button>
+                  </div>
+                )
+              }
+            ]}
+          />
         </CardContent>
       </Card>
     </div>

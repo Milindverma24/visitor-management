@@ -23,34 +23,6 @@ if not it_dept:
     db.refresh(it_dept)
     print("Created IT Department")
 
-# Create HR Manager
-hr_manager = db.query(User).filter(User.email == "hr@vms.com").first()
-if not hr_manager:
-    hr_manager = User(
-        email="hr@vms.com",
-        full_name="Sarah Connor",
-        hashed_password=hash_password("password"),
-        role="HR_MANAGER",
-        department_id=hr_dept.id,
-        is_active=True
-    )
-    db.add(hr_manager)
-    print("Created HR Manager")
-
-# Create IT Manager
-it_manager = db.query(User).filter(User.email == "it@vms.com").first()
-if not it_manager:
-    it_manager = User(
-        email="it@vms.com",
-        full_name="John Smith",
-        hashed_password=hash_password("password"),
-        role="DEPARTMENT_HEAD",
-        department_id=it_dept.id,
-        is_active=True
-    )
-    db.add(it_manager)
-    print("Created IT Manager")
-
 db.commit()
 db.close()
 print("Seeding complete.")

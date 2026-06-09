@@ -27,7 +27,7 @@ APPROVAL_TEMPLATE = """
         </div>
         <div class="content">
             <p>Dear <strong>{{ visitor_name }}</strong>,</p>
-            <p>Your visit to India Glycols Limited has been successfully approved.</p>
+            <p>Your visit to Indian Glycol Limited has been successfully approved.</p>
             <div class="details">
                 <p><strong>Date & Time:</strong> {{ visit_date }}</p>
                 <p><strong>Host Employee:</strong> {{ host_name }}</p>
@@ -37,7 +37,7 @@ APPROVAL_TEMPLATE = """
         </div>
         <div class="footer">
             <p>This is an automated message from the <strong>IGL Enterprise Visitor Management System</strong>.</p>
-            <p>India Glycols Limited - Kashipur</p>
+            <p>Indian Glycol Limited - Kashipur</p>
         </div>
     </div>
 </body>
@@ -56,7 +56,7 @@ CHECKIN_TEMPLATE = """
         </div>
         <div class="content">
             <p>Dear <strong>{{ visitor_name }}</strong>,</p>
-            <p>You have been successfully checked in at India Glycols Limited.</p>
+            <p>You have been successfully checked in at Indian Glycol Limited.</p>
             <div class="details">
                 <p><strong>Check-In Time:</strong> {{ checkin_time }}</p>
                 <p><strong>Host Employee:</strong> {{ host_name }}</p>
@@ -65,7 +65,7 @@ CHECKIN_TEMPLATE = """
         </div>
         <div class="footer">
             <p>This is an automated message from the <strong>IGL Enterprise Visitor Management System</strong>.</p>
-            <p>India Glycols Limited - Kashipur</p>
+            <p>Indian Glycol Limited - Kashipur</p>
         </div>
     </div>
 </body>
@@ -84,7 +84,7 @@ CHECKOUT_TEMPLATE = """
         </div>
         <div class="content">
             <p>Dear <strong>{{ visitor_name }}</strong>,</p>
-            <p>You have been successfully checked out from India Glycols Limited.</p>
+            <p>You have been successfully checked out from Indian Glycol Limited.</p>
             <div class="details">
                 <p><strong>Check-Out Time:</strong> {{ checkout_time }}</p>
             </div>
@@ -92,7 +92,7 @@ CHECKOUT_TEMPLATE = """
         </div>
         <div class="footer">
             <p>This is an automated message from the <strong>IGL Enterprise Visitor Management System</strong>.</p>
-            <p>India Glycols Limited - Kashipur</p>
+            <p>Indian Glycol Limited - Kashipur</p>
         </div>
     </div>
 </body>

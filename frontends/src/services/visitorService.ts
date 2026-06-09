@@ -1,3 +1,4 @@
+import axios from "axios";
 import api from "./api";
 
 export const createVisitor = (data: any) =>
@@ -15,13 +16,18 @@ export const searchVisitor = (
 
 export const uploadPhoto = (
   formData: FormData
-) =>
-  api.post(
+) => {
+  const token = localStorage.getItem("token");
+  return axios.post(
     "/api/visitors/photo",
     formData,
     {
       headers: {
-        "Content-Type": "multipart/form-data"
+        ...(token ? { Authorization: `Bearer ${token}` } : {})
       }
     }
   );
+};
+
+export const getVisitorStatus = (phone: string) =>
+  api.get(`/api/visitors/status/${phone}`);

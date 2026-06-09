@@ -146,80 +146,83 @@ const Departments = () => {
       </div>
 
       <Card>
-        <CardHeader className="flex flex-row items-center justify-between pb-4">
-          <CardTitle>Departments</CardTitle>
-          <div className="flex items-center space-x-4">
-            <div className="relative w-64 mt-0">
+        <CardHeader className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-4">
+          <CardTitle className="text-xl font-bold text-slate-800">Departments</CardTitle>
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full sm:w-auto">
+            <div className="relative w-full sm:w-64 mt-0">
               <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-500" />
               <Input 
                 type="search" 
                 placeholder="Search departments..." 
-                className="pl-9 m-0"
+                className="pl-9 m-0 w-full bg-white border-slate-200 rounded-xl focus:border-cyan-500 focus:ring-cyan-500"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
               />
             </div>
-            <Button onClick={() => handleOpenModal()}>
+            <Button onClick={() => handleOpenModal()} className="w-full sm:w-auto justify-center bg-cyan-600 hover:bg-cyan-700 text-white transition-all duration-200">
               <Plus className="h-4 w-4 mr-2" />
               Add Department
             </Button>
           </div>
         </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Code</TableHead>
-                <TableHead>Name</TableHead>
-                <TableHead>Head</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filtered.map((dept) => (
-                <TableRow key={dept.id}>
-                  <TableCell className="font-mono">{dept.code}</TableCell>
-                  <TableCell className="font-medium">{dept.name}</TableCell>
-                  <TableCell>{dept.head || "N/A"}</TableCell>
-                  <TableCell>
-                    {dept.is_active ? (
-                      <Badge variant="success">Active</Badge>
-                    ) : (
-                      <Badge variant="warning">Inactive</Badge>
-                    )}
-                  </TableCell>
-                  <TableCell className="text-right space-x-2">
-                    <Button size="sm" variant="outline" onClick={() => handleOpenModal(dept)}>
-                      <Edit className="h-4 w-4" />
-                    </Button>
-                    <Button size="sm" variant="outline" className="text-red-600 border-red-200 hover:bg-red-50" onClick={() => handleDelete(dept.id)}>
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              ))}
-              {filtered.length === 0 && !isLoading && (
+        <CardContent className="p-0 sm:p-6">
+          <div className="overflow-x-auto w-full">
+            <Table className="min-w-full">
+              <TableHeader className="bg-slate-50/40">
                 <TableRow>
-                  <TableCell colSpan={5} className="text-center py-6 text-slate-500">
-                    No departments found.
-                  </TableCell>
+                  <TableHead className="font-semibold text-slate-600 pl-6 whitespace-nowrap">Code</TableHead>
+                  <TableHead className="font-semibold text-slate-600 whitespace-nowrap min-w-[180px]">Name</TableHead>
+                  <TableHead className="font-semibold text-slate-600 whitespace-nowrap">Head</TableHead>
+                  <TableHead className="font-semibold text-slate-600 whitespace-nowrap">Status</TableHead>
+                  <TableHead className="font-semibold text-slate-600 pr-6 text-right whitespace-nowrap">Actions</TableHead>
                 </TableRow>
-              )}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {filtered.map((dept) => (
+                  <TableRow key={dept.id} className="hover:bg-slate-50/50 transition-colors">
+                    <TableCell className="pl-6 py-4 font-mono whitespace-nowrap">{dept.code}</TableCell>
+                    <TableCell className="font-medium break-words">{dept.name}</TableCell>
+                    <TableCell className="whitespace-nowrap">{dept.head || "N/A"}</TableCell>
+                    <TableCell className="whitespace-nowrap">
+                      {dept.is_active ? (
+                        <Badge variant="success">Active</Badge>
+                      ) : (
+                        <Badge variant="warning">Inactive</Badge>
+                      )}
+                    </TableCell>
+                    <TableCell className="pr-6 text-right whitespace-nowrap space-x-2">
+                      <Button size="sm" variant="outline" onClick={() => handleOpenModal(dept)}>
+                        <Edit className="h-4 w-4" />
+                      </Button>
+                      <Button size="sm" variant="outline" className="text-red-600 border-red-200 hover:bg-red-50" onClick={() => handleDelete(dept.id)}>
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+                {filtered.length === 0 && !isLoading && (
+                  <TableRow>
+                    <TableCell colSpan={5} className="text-center py-12 text-slate-400">
+                      <Search className="h-12 w-12 mx-auto text-slate-300 mb-3" />
+                      <p className="font-medium text-slate-500">No departments found matching your search</p>
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </div>
         </CardContent>
       </Card>
 
       {/* Modal */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-md overflow-hidden">
+        <div className="fixed inset-0 z-50 flex items-start sm:items-center justify-center p-2 sm:p-4 bg-slate-900/60 backdrop-blur-sm overflow-y-auto">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-md my-auto overflow-hidden">
             <div className="px-6 py-4 border-b border-slate-200 flex justify-between items-center">
-              <h3 className="text-lg font-semibold">{editingDept ? "Edit Department" : "Add Department"}</h3>
-              <button onClick={handleCloseModal} className="text-slate-400 hover:text-slate-600">&times;</button>
+              <h3 className="text-lg font-semibold text-slate-800">{editingDept ? "Edit Department" : "Add Department"}</h3>
+              <button onClick={handleCloseModal} className="text-slate-400 hover:text-slate-600 text-xl font-bold">&times;</button>
             </div>
-            <form onSubmit={handleSubmit} className="p-6 space-y-4">
+            <form onSubmit={handleSubmit} className="p-4 sm:p-6 space-y-4">
               <Input label="Department Name" name="name" value={formData.name} onChange={handleInputChange} required />
               <Input label="Department Code" name="code" value={formData.code} onChange={handleInputChange} required />
               <Input label="Department Head" name="head" value={formData.head} onChange={handleInputChange} />
@@ -233,14 +236,14 @@ const Departments = () => {
                   name="is_active" 
                   checked={formData.is_active} 
                   onChange={handleInputChange}
-                  className="rounded border-slate-300 text-secondary focus:ring-secondary"
+                  className="rounded border-slate-300 text-secondary focus:ring-secondary h-4 w-4"
                 />
-                <label htmlFor="is_active" className="text-sm font-medium">Active Status</label>
+                <label htmlFor="is_active" className="text-sm font-medium text-slate-700">Active Status</label>
               </div>
 
-              <div className="pt-4 flex justify-end space-x-2">
-                <Button variant="outline" type="button" onClick={handleCloseModal}>Cancel</Button>
-                <Button type="submit">Save</Button>
+              <div className="pt-4 flex flex-col-reverse sm:flex-row justify-end gap-2 border-t border-slate-100 sm:space-x-2 space-y-reverse">
+                <Button variant="outline" type="button" onClick={handleCloseModal} className="w-full sm:w-auto justify-center">Cancel</Button>
+                <Button type="submit" className="w-full sm:w-auto justify-center">Save</Button>
               </div>
             </form>
           </div>

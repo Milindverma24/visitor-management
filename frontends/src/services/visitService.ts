@@ -22,3 +22,6 @@ export const checkInVisit = (id: number) =>
 
 export const checkOutVisit = (id: number) =>
   api.put(`/api/visitors/checkout/${id}`);
+
+export const expireVisit = (id: number) =>
+  api.put(`/api/visitors/expire/${id}`);

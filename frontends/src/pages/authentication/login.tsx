@@ -20,13 +20,13 @@ const Login = () => {
       const res = await loginUser({ email, password });
       if (res.data.access_token) {
         localStorage.setItem("token", res.data.access_token);
-        toast.success("Logged in successfully");
+        toast.success("Logged in successfully", { id: "auth-toast" });
         navigate("/dashboard");
       } else {
-        toast.error("Invalid credentials");
+        toast.error("Wrong credential", { id: "auth-toast" });
       }
     } catch (error: any) {
-      toast.error(error.response?.data?.message || "Invalid credentials");
+      toast.error("Wrong credential", { id: "auth-toast" });
     } finally {
       setIsLoading(false);
     }
@@ -57,19 +57,30 @@ const Login = () => {
               <Input
                 label="Email Address"
                 type="email"
-                placeholder="admin@igl.com"
+                placeholder="ultimate@igl.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
               />
-              <Input
-                label="Password"
-                type="password"
-                placeholder="••••••••"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-              />
+              <div className="space-y-1">
+                <Input
+                  label="Password"
+                  type="password"
+                  placeholder="••••••••"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                />
+                <div className="text-right">
+                  <button
+                    type="button"
+                    onClick={() => toast.error("Contact to admin", { id: "auth-toast" })}
+                    className="text-xs font-bold text-blue-600 hover:text-blue-700 transition-colors"
+                  >
+                    Forgot Password?
+                  </button>
+                </div>
+              </div>
             </CardContent>
             <CardFooter className="flex-col gap-4">
               <Button type="submit" className="w-full" isLoading={isLoading}>
@@ -83,7 +94,7 @@ const Login = () => {
                   <span className="bg-white px-2 text-slate-500">Or</span>
                 </div>
               </div>
-              <Button type="button" variant="outline" className="w-full text-blue-600 border-blue-200 hover:bg-blue-50" onClick={() => navigate('/register')}>
+              <Button type="button" variant="outline" className="w-full text-blue-600 border-blue-200 hover:bg-blue-50" onClick={() => navigate('/visitor')}>
                 Open Public Kiosk Mode
               </Button>
             </CardFooter>

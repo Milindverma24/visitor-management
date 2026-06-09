@@ -18,6 +18,7 @@ from app.utils.email_templates import render_approval_email, render_checkin_emai
 from app.utils.whatsapp_service import send_whatsapp
 from app.services import telegram_service
 from app.utils.timezone import to_ist, get_ist_now
+from app.api.websockets import sync_broadcast
 
 import os
 import shutil
@@ -53,7 +54,34 @@ async def upload_photo(
 
     return {
         "success": True,
-        "photo_path": file_path
+        "photo_path": f"/{file_path}"
+    }
+
+##################################################
+# UPLOAD VISITOR/CANDIDATE DOCUMENT
+##################################################
+
+@router.post("/upload-doc")
+async def upload_document(
+    file: UploadFile = File(...)
+):
+    import time
+    ext = os.path.splitext(file.filename)[1].lower()
+    if ext in [".jpg", ".jpeg", ".png"]:
+        folder = "uploads/photos"
+    else:
+        folder = "uploads/documents"
+        
+    os.makedirs(folder, exist_ok=True)
+    safe_filename = f"{int(time.time())}_{file.filename.replace(' ', '_')}"
+    file_path = os.path.join(folder, safe_filename)
+    
+    with open(file_path, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+        
+    return {
+        "success": True,
+        "file_path": f"/{file_path}"
     }
 ##################################################
 # REGISTER VISITOR
@@ -162,6 +190,53 @@ def search_visitor(phone_number: str):
         }
     }
 
+@router.get("/status/{phone_number}")
+def get_visitor_status(phone_number: str):
+    db: Session = SessionLocal()
+    
+    # Clean phone number (strip spaces/dashes)
+    clean_phone = phone_number.strip().replace(" ", "").replace("-", "")
+    
+    # Search for visitor by phone
+    visitor = db.query(Visitor).filter(
+        (Visitor.phone_number == clean_phone) |
+        (Visitor.phone_number == phone_number) |
+        (Visitor.phone_number.like(f"%{clean_phone}%"))
+    ).first()
+    
+    if not visitor:
+        return {
+            "success": False,
+            "message": "No visitor profile found with this phone number."
+        }
+        
+    # Get latest visit pass for this visitor
+    visit = db.query(Visit).filter(
+        Visit.visitor_id == visitor.id
+    ).order_by(Visit.id.desc()).first()
+    
+    if not visit:
+        return {
+            "success": True,
+            "visitor_name": visitor.full_name,
+            "has_visit": False,
+            "message": "Profile exists, but no active visit passes were found."
+        }
+        
+    return {
+        "success": True,
+        "visitor_name": visitor.full_name,
+        "has_visit": True,
+        "visit_id": visit.id,
+        "card_id": visit.card_id,
+        "status": visit.status,
+        "host_employee": visit.host_employee,
+        "purpose": visit.purpose,
+        "arrival_date": visit.arrival_date.isoformat() if visit.arrival_date else None,
+        "valid_up_to": visit.valid_up_to.isoformat() if visit.valid_up_to else None,
+        "department_name": visit.department.name if visit.department else "Unknown"
+    }
+
 ##################################################
 # CREATE VISIT REQUEST
 ##################################################
@@ -211,7 +286,8 @@ def create_visit(
         is_hod_approval_required=request.is_hod_approval_required,
         accessories=request.accessories,
         valid_up_to=request.valid_up_to,
-        accompanied_by_count=request.accompanied_by_count
+        accompanied_by_count=request.accompanied_by_count,
+        pass_type=request.pass_type or "VISITOR_PASS"
     )
 
     db.add(visit)
@@ -219,14 +295,15 @@ def create_visit(
     db.refresh(visit)
     
     # Generate simple Card ID based on visit ID
-    visit.card_id = f"VM/{visit.id:06d}"
+    if visit.pass_type == "VENDOR_PASS":
+        visit.card_id = f"TRP/{visit.id:06d}"
+    else:
+        visit.card_id = f"VM/{visit.id:06d}"
     db.commit()
     db.refresh(visit)
     
     # Telegram Photo Notification (if visitor has a photo)
     if visitor.photo_path:
-        # Assuming photo_path has a leading slash in DB, e.g., /uploads/photos/...
-        # we need relative path for telegram_service
         local_photo_path = visitor.photo_path.lstrip("/")
         background_tasks.add_task(
             bg_visitor_photo,
@@ -236,6 +313,34 @@ def create_visit(
             purpose=visit.purpose,
             target_id=visit.id
         )
+        
+    def bg_visit_request_alert(visitor_name, host_employee, purpose, dept_name, visit_id):
+        from app.database.session import SessionLocal
+        from app.services import telegram_service
+        from app.utils.timezone import get_ist_now
+        db_session = SessionLocal()
+        try:
+            alert_msg = f"⏳ <b>NEW PASS REQUEST PENDING</b>\n\nVisitor: {visitor_name}\nDepartment: {dept_name}\nHost: {host_employee}\nPurpose: {purpose}\nTime: {get_ist_now().strftime('%Y-%m-%d %H:%M:%S')}\n\n<i>Please review and approve in the Admin Dashboard.</i>"
+            telegram_service.send_admin_notification(db_session, alert_msg, visit_id)
+            if dept_name != "Unknown":
+                telegram_service.send_department_notification(db_session, dept_name, alert_msg, visit_id)
+        finally:
+            db_session.close()
+
+    background_tasks.add_task(
+        bg_visit_request_alert,
+        visitor_name=visitor.full_name,
+        host_employee=request.host_employee,
+        purpose=visit.purpose,
+        dept_name=request.department or "Unknown",
+        visit_id=visit.id
+    )
+
+    sync_broadcast("NEW_VISIT", {
+        "visit_id": visit.id,
+        "visitor_name": visitor.full_name,
+        "department": request.department or "Unknown"
+    })
 
     return {
         "success": True,
@@ -245,9 +350,27 @@ def create_visit(
     }
 
 ##################################################
+# EXPIRE VISIT
+##################################################
 
+@router.put("/expire/{visit_id}")
+def expire_visit(
+    visit_id: int,
+    user: dict = Depends(get_current_user)
+):
+    db: Session = SessionLocal()
+    visit = db.query(Visit).filter(Visit.id == visit_id).first()
+    if not visit:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="Visit Not Found")
+        
+    visit.status = "EXPIRED"
+    db.commit()
+    
+    return {"success": True, "message": "Visit marked as expired"}
+
+##################################################
 # GET ALL VISITS
-
 ##################################################
 
 @router.get("/visits")
@@ -258,29 +381,53 @@ def get_all_visits(user: dict = Depends(get_current_user)):
     query = db.query(Visit)
 
     role = user.get("role", "EMPLOYEE")
-    
-    if role in ["SUPER_ADMIN", "ADMIN"]:
-        # See all
+
+    if role in ["CORPORATE_SUPER_ADMIN", "PLANT_ADMIN"]:
+        # Full visibility — no filter
         pass
-    elif role == "DEPARTMENT_HEAD":
-        # See only department's visits
+    elif role in ["DEPARTMENT_HEAD", "DEPARTMENT_EXECUTIVE"]:
+        # Own department's visits only
         dept_id = user.get("department_id")
         query = query.filter(Visit.department_id == dept_id)
-    elif role == "SECURITY":
-        # See only today's visits
+    elif role in ["SECURITY_GUARD", "SECURITY_SUPERVISOR"]:
+        from sqlalchemy import or_
         today = datetime.utcnow().date()
-        query = query.filter(func.date(Visit.created_at) == today)
+        query = query.filter(
+            or_(
+                Visit.status == "APPROVED",
+                Visit.status == "CHECKED_IN",
+                func.date(Visit.created_at) == today,
+                func.date(Visit.check_in_time) == today,
+                func.date(Visit.check_out_time) == today
+            )
+        )
     elif role == "HR_MANAGER":
-        # HR sees interviews, but Visit model is separate from Interview model now.
-        # Maybe they see nothing here, or only visits where pass_type == INTERVIEW_PASS.
+        # HR sees interview passes only
         query = query.filter(Visit.pass_type == "INTERVIEW_PASS")
+    elif role == "RECEPTIONIST":
+        # Receptionist sees all pending and today's
+        from sqlalchemy import or_
+        today = datetime.utcnow().date()
+        query = query.filter(
+            or_(
+                Visit.status == "PENDING",
+                func.date(Visit.created_at) == today
+            )
+        )
     else:
         # EMPLOYEE sees only their own hosted visitors
         query = query.filter(Visit.host_employee == user.get("sub"))
 
     visits = query.all()
 
+    # Dynamically update status to EXPIRED if valid_up_to has passed and not checked in
+    current_time = datetime.utcnow()
+    for v in visits:
+        if v.status == "APPROVED" and v.check_in_time is None and v.valid_up_to and current_time > v.valid_up_to:
+            v.status = "EXPIRED"
+
     return visits
+
 
 ##################################################
 # APPROVE VISIT
@@ -293,6 +440,15 @@ def approve_visit(
     background_tasks: BackgroundTasks,
     user: dict = Depends(get_current_user)
 ):
+    """
+    Approves a visitor pass request.
+
+    IGLGATE v3.0 Approval Chain:
+    - Approver: DEPARTMENT_HEAD (scoped to host dept) | PLANT_ADMIN | CORPORATE_SUPER_ADMIN
+    - EMPLOYEE and RECEPTIONIST cannot approve.
+    - Department Head can only approve visits for their own department.
+    """
+    from app.security.rbac import can_approve_visit
 
     db: Session = SessionLocal()
 
@@ -303,15 +459,28 @@ def approve_visit(
     ).first()
 
     if not visit:
-
         return {
             "success": False,
             "message": "Visit Not Found"
         }
 
+    if not can_approve_visit(user, visit, db):
+        return {
+            "success": False,
+            "message": "Access Denied: You do not have authority to approve this visit. Only the Department Head of the host department, Plant Admin, or Corporate Super Admin can approve."
+        }
+
     visit.status = "APPROVED"
-    visit.approved_by = "Milind Verma"
+    visit.approved_by = user.get("sub")
     visit.approved_at = datetime.utcnow()
+    
+    # Make pass valid only for that particular day if not explicitly set
+    if not visit.valid_up_to and visit.arrival_date:
+        # Set to 23:59:59 of arrival_date
+        visit.valid_up_to = visit.arrival_date.replace(hour=23, minute=59, second=59)
+    elif not visit.valid_up_to:
+        # If no arrival date, default to end of today
+        visit.valid_up_to = datetime.utcnow().replace(hour=23, minute=59, second=59)
 
     qr_path = generate_qr(
         visit.id
@@ -357,6 +526,8 @@ def approve_visit(
         visit_id=visit.id,
         card_id=visit.card_id
     )
+
+    sync_broadcast("VISIT_APPROVED", {"visit_id": visit.id, "status": "APPROVED"})
 
     return {
         "success": True,
@@ -448,18 +619,20 @@ def checkin_visitor(
     ).first()
 
     if not visit:
-
-        return {
-            "success": False,
-            "message": "Visit Not Found"
-        }
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="Visit Not Found")
 
     if visit.status != "APPROVED":
+        from fastapi import HTTPException
+        raise HTTPException(status_code=400, detail="Visit Not Approved or Already Processed")
 
-        return {
-            "success": False,
-            "message": "Visit Not Approved"
-        }
+    if visit.check_in_time:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=400, detail="Already Checked-In")
+
+    if visit.valid_up_to and datetime.utcnow() > visit.valid_up_to:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=400, detail="Pass Expired")
 
     visit.check_in_time = datetime.utcnow()
     visit.checked_in_by = "Security Guard 1"
@@ -496,6 +669,8 @@ def checkin_visitor(
         dept_name=dept_name
     )
 
+    sync_broadcast("CHECK_IN", {"visit_id": visit.id, "visitor_name": visitor_name})
+
     return {
         "success": True,
         "message": "Visitor Checked In"
@@ -517,11 +692,16 @@ def checkout_visitor(
     ).first()
 
     if not visit:
-
-        return {
-            "success": False,
-            "message": "Visit Not Found"
-        }
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="Visit Not Found")
+        
+    if visit.check_out_time:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=400, detail="Already Checked-Out")
+        
+    if not visit.check_in_time:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=400, detail="Cannot check out: Not Checked-In yet")
 
     visit.check_out_time = datetime.utcnow()
     visit.checked_out_by = "Security Guard 1"
@@ -556,6 +736,8 @@ def checkout_visitor(
         gate_number=visit.gate_number,
         dept_name=dept_name
     )
+
+    sync_broadcast("CHECK_OUT", {"visit_id": visit.id, "visitor_name": visitor_name})
 
     return {
         "success": True,
@@ -601,6 +783,27 @@ def blacklist_visitor(visitor_id: int):
         }
 
     visitor.is_blacklisted = True
+
+    # Add entry to unified Blacklist table
+    from app.models.blacklist import Blacklist, BlacklistType
+    
+    b_type = BlacklistType.DRIVER if (visitor.category and visitor.category.upper() == "DRIVER") else BlacklistType.VISITOR
+    existing = db.query(Blacklist).filter(
+        Blacklist.reference_identifier == visitor.phone_number,
+        Blacklist.blacklist_type == b_type,
+        Blacklist.is_active == True
+    ).first()
+    
+    if not existing:
+        blacklist_entry = Blacklist(
+            blacklist_type=b_type,
+            reference_id=visitor.id,
+            reference_identifier=visitor.phone_number,
+            reference_name=visitor.full_name,
+            reason="Blacklisted from Visitor Directory",
+            is_active=True
+        )
+        db.add(blacklist_entry)
 
     db.commit()
 
@@ -659,20 +862,58 @@ def bg_approval_notifications(visitor_email, visitor_name, visit_date, host_name
             except Exception:
                 pass
         
-        approve_msg = f"✅ <b>VISITOR APPROVED</b>\n\nVisitor Name: {visitor_name}\nDepartment: {dept_name}\nHost Employee: {host_name}\nVisit ID: {visit_id}\nPass Type: Standard\nDate: {get_ist_now().strftime('%Y-%m-%d')}\nTime: {get_ist_now().strftime('%H:%M:%S')}"
+        from app.models.visit import Visit
+        from app.models.visitor import Visitor
+        from app.models.vehicle import Vehicle
+        import re
+        
+        # Check if there is a vehicle associated with this visit (Transporter Pass)
+        visit = db.query(Visit).filter(Visit.id == visit_id).first()
+        vehicle_details = ""
+        pass_type_str = "Standard"
+        
+        if visit and visit.pass_type == "VENDOR_PASS":
+            pass_type_str = "Transporter/Vehicle"
+            
+            # Try to extract Vehicle Number from purpose like "[DL 1M 1234] - MATERIAL DELIVERY"
+            match = re.search(r'\[(.*?)\]', visit.purpose)
+            vehicle_number = match.group(1) if match else None
+            
+            if vehicle_number:
+                vehicle = db.query(Vehicle).filter(Vehicle.vehicle_number == vehicle_number).first()
+                if vehicle:
+                    vehicle_details = f"\n🚚 <b>VEHICLE DETAILS</b>\nNumber: {vehicle.vehicle_number}\nType: {vehicle.vehicle_type}\nCompany: {vehicle.transport_company or 'N/A'}"
+        
+        approve_msg = f"✅ <b>VISITOR APPROVED</b>\n\nVisitor Name: {visitor_name}\nDepartment: {dept_name}\nHost Employee: {host_name}\nVisit ID: {visit_id}\nPass Type: {pass_type_str}\nDate: {get_ist_now().strftime('%Y-%m-%d')}\nTime: {get_ist_now().strftime('%H:%M:%S')}{vehicle_details}"
+        
         telegram_service.send_admin_notification(db, approve_msg, visit_id)
         telegram_service.send_department_notification(db, dept_name, approve_msg, visit_id)
         
         if badge_path:
             telegram_service.send_pass_notification(
                 db=db,
-                department=dept_name,
+                departments=[dept_name, "SECURITY"],
                 pass_path=badge_path,
                 pass_number=card_id or str(visit_id),
                 name=visitor_name,
-                pass_type="Standard",
+                pass_type=pass_type_str,
                 target_id=visit_id
             )
+            
+            # Email the guard
+            from app.core.config import settings
+            if settings.EMAIL_USER:
+                try:
+                    guard_email = os.getenv("GUARD_EMAIL", "guard@igl.co.in")
+                    send_email(
+                        recipient_email=guard_email,
+                        subject=f"NEW ENTRY PASS: {visitor_name}",
+                        body=email_body,
+                        attachment_path=badge_path,
+                        is_html=True
+                    )
+                except Exception as e:
+                    print(f"Failed to email guard: {e}")
         db.commit()
     except Exception:
         db.rollback()
@@ -719,7 +960,7 @@ def bg_checkin_notifications(visitor_name, time_str, host_name, visitor_email, v
             except Exception:
                 pass
         try:
-            send_email("security@company.com", subject, email_body, is_html=True)
+            send_email("anshverma24112005@gmail.com", subject, email_body, is_html=True)
         except Exception:
             pass
             
@@ -749,7 +990,7 @@ def bg_checkout_notifications(visitor_name, time_str, visitor_email, visitor_pho
             except Exception:
                 pass
         try:
-            send_email("security@company.com", subject, email_body, is_html=True)
+            send_email("anshverma24112005@gmail.com", subject, email_body, is_html=True)
         except Exception:
             pass
             

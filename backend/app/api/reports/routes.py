@@ -77,7 +77,7 @@ def get_telegram_logs(user: dict = Depends(get_current_user)):
     
     # Only Admin or Super Admin should view notification logs
     role = user.get("role", "EMPLOYEE")
-    if role not in ["SUPER_ADMIN", "ADMIN"]:
+    if role not in ["CORPORATE_SUPER_ADMIN", "PLANT_ADMIN"]:
         return []
         
     # Fetch logs starting with TELEGRAM_

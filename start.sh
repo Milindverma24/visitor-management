@@ -17,7 +17,7 @@ cd ..
 
 # 2. Start the Frontend (Vite)
 echo "Starting Frontend..."
-cd frontend
+cd frontends
 # Start npm in the foreground so the user sees the output and can Ctrl+C
 npm run dev
 
