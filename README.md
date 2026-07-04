@@ -19,8 +19,7 @@ An industrial-grade Visitor & Access Management System designed for **Indian Gly
 
 * **Backend:** FastAPI (Python), SQLAlchemy ORM, Uvicorn, PostgreSQL, Redis (Caching and WebSockets).
 * **Frontend:** React, Vite, TypeScript, Tailwind CSS / Custom CSS.
-* **Infrastructure:** Docker & Docker Compose (running PostgreSQL and Redis databases).
-
+* **Infrastructure:** Docker & Docker Compose are used for local development to run PostgreSQL and Redis. In production, the application is deployed to Vercel with managed PostgreSQL (Neon/Supabase) and managed Redis (if required).
 ---
 
 ## 📁 Directory Structure
