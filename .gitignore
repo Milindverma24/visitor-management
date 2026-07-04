@@ -70,7 +70,7 @@ lerna-debug.log*
 .env.test.local
 .env.production.local
 .env.*
-!.env.example
+.env.example
 
 # Dynamic media and user uploads
 backend/uploads/*
