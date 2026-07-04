@@ -69,7 +69,7 @@ export default function LandingPage() {
   ];
 
   return (
-    <div className="h-screen w-screen bg-[#F8FAFC] text-[#0F172A] relative overflow-hidden industrial-grid font-sans flex flex-col selection:bg-[#FBBF24] selection:text-primary">
+    <div className="min-h-screen w-screen bg-[#F8FAFC] text-[#0F172A] relative overflow-y-auto overflow-x-hidden md:overflow-hidden industrial-grid font-sans flex flex-col selection:bg-[#FBBF24] selection:text-primary">
       
       {/* Background glow filters */}
       <div className="absolute top-0 left-1/4 w-[500px] h-[500px] bg-[#2563EB]/5 rounded-full blur-[120px] pointer-events-none" />

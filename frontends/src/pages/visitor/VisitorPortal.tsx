@@ -515,7 +515,7 @@ export default function VisitorPortal() {
   const textAreaClass = "w-full h-[60px] border border-slate-200 rounded-xl p-4 text-xs font-bold bg-slate-50/50 hover:bg-slate-50 focus:bg-white focus:border-[#2563EB] focus:ring-4 focus:ring-[#2563EB]/10 transition-all outline-none text-[#0F172A] resize-none shadow-sm custom-scrollbar";
 
   return (
-    <div className="h-screen w-screen bg-[#F8FAFC] text-[#0F172A] relative overflow-hidden flex flex-col font-sans industrial-grid">
+    <div className="min-h-screen w-screen bg-[#F8FAFC] text-[#0F172A] relative overflow-y-auto overflow-x-hidden md:overflow-hidden flex flex-col font-sans industrial-grid">
       
       {/* Background aesthetic blobs */}
       <div className="absolute top-0 left-1/4 w-[500px] h-[500px] bg-[#2563EB]/5 rounded-full blur-[120px] pointer-events-none" />
