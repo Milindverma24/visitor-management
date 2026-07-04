@@ -515,7 +515,7 @@ export default function VisitorPortal() {
   const textAreaClass = "w-full h-[60px] border border-slate-200 rounded-xl p-4 text-xs font-bold bg-slate-50/50 hover:bg-slate-50 focus:bg-white focus:border-[#2563EB] focus:ring-4 focus:ring-[#2563EB]/10 transition-all outline-none text-[#0F172A] resize-none shadow-sm custom-scrollbar";
 
   return (
-    <div className="min-h-screen w-screen bg-[#F8FAFC] text-[#0F172A] relative overflow-y-auto overflow-x-hidden md:overflow-hidden flex flex-col font-sans industrial-grid">
+    <div className="min-h-screen w-screen bg-[#F8FAFC] text-[#0F172A] relative overflow-x-hidden flex flex-col font-sans industrial-grid">
       
       {/* Background aesthetic blobs */}
       <div className="absolute top-0 left-1/4 w-[500px] h-[500px] bg-[#2563EB]/5 rounded-full blur-[120px] pointer-events-none" />
@@ -565,7 +565,7 @@ export default function VisitorPortal() {
       </header>
 
       {/* MAIN CONTAINER */}
-      <main className="flex-1 w-full max-w-[1500px] mx-auto p-4 md:p-8 overflow-y-auto md:overflow-hidden flex items-center justify-center z-10">
+      <main className="flex-1 w-full max-w-[1500px] mx-auto p-4 md:p-8 flex flex-col items-center justify-start md:justify-center z-10">
         <AnimatePresence mode="wait">
           
           {isSubmitted ? (
@@ -1004,7 +1004,7 @@ export default function VisitorPortal() {
               initial={{ opacity: 0, x: 20 }}
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, scale: 0.98 }}
-              className="w-full h-full bg-white/95 backdrop-blur-md border border-slate-200 rounded-3xl shadow-2xl flex flex-col md:flex-row overflow-y-auto md:overflow-hidden"
+              className="w-full h-auto md:h-full bg-white/95 backdrop-blur-md border border-slate-200 rounded-3xl shadow-2xl flex flex-col md:flex-row overflow-hidden"
             >
               
               {/* LEFT COLUMN: FORM FIELDS */}

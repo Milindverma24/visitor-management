@@ -69,7 +69,7 @@ export default function LandingPage() {
   ];
 
   return (
-    <div className="min-h-screen w-screen bg-[#F8FAFC] text-[#0F172A] relative overflow-y-auto overflow-x-hidden md:overflow-hidden industrial-grid font-sans flex flex-col selection:bg-[#FBBF24] selection:text-primary">
+    <div className="min-h-screen w-screen bg-[#F8FAFC] text-[#0F172A] relative overflow-x-hidden industrial-grid font-sans flex flex-col selection:bg-[#FBBF24] selection:text-primary">
       
       {/* Background glow filters */}
       <div className="absolute top-0 left-1/4 w-[500px] h-[500px] bg-[#2563EB]/5 rounded-full blur-[120px] pointer-events-none" />
@@ -114,7 +114,7 @@ export default function LandingPage() {
       </header>
 
       {/* MAIN CONTENT - SINGLE SCREEN, NO SCROLL */}
-      <main className="flex-1 flex flex-col items-center justify-center p-6 w-full max-w-7xl mx-auto z-10 overflow-hidden">
+      <main className="flex-1 flex flex-col items-center justify-start md:justify-center p-6 w-full max-w-7xl mx-auto z-10 pt-12 md:pt-6">
         <div className="flex flex-col items-center mb-8 shrink-0">
           <span className="text-xs font-mono font-bold tracking-widest text-slate-500 uppercase mb-2">
             SELECT ACCESS POINT
