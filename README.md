@@ -19,7 +19,17 @@ An industrial-grade Visitor & Access Management System designed for **Indian Gly
 
 * **Backend:** FastAPI (Python), SQLAlchemy ORM, Uvicorn, PostgreSQL, Redis (Caching and WebSockets).
 * **Frontend:** React, Vite, TypeScript, Tailwind CSS / Custom CSS.
-* **Infrastructure:** Docker & Docker Compose are used for local development to run PostgreSQL and Redis. In production, the application is deployed to Vercel with managed PostgreSQL (Neon/Supabase) and managed Redis (if required).
+* **Infrastructure:** 
+  - **Frontend Hosting:** Vercel
+  - **Backend Hosting:** Render
+  - **Email Delivery:** Brevo API
+  - **Local Development:** Docker & Docker Compose (running PostgreSQL and Redis databases).
+
+---
+
+## 🌐 Live Deployment
+**Production Link:** [https://visitor-management-iota-nine.vercel.app/](https://visitor-management-iota-nine.vercel.app/)
+
 ---
 
 ## 📁 Directory Structure
@@ -140,3 +150,9 @@ The [deployment/scripts/](file:///Users/milindverma/Desktop/visitor-management-s
 
 ## 📄 License
 This project is licensed under the MIT License - see the [LICENSE](file:///Users/milindverma/Desktop/visitor-management-system/LICENSE) file for details.
+
+---
+
+<div align="center">
+  <h1>MADE BY MILIND VERMA</h1>
+</div>

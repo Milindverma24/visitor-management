@@ -9,7 +9,9 @@ All notable changes to the **Indian Glycols Limited - Visitor Management System*
 This release focuses on production-ready cloud deployment, enhanced security, database optimizations, and in-memory document storage.
 
 ### 🚀 Added
-- **Vercel Serverless Hosting Support**: Created `vercel.json` configurations to deploy the FastAPI backend as serverless lambdas.
+- **Full Cloud Deployment Setup**: Live frontend hosted on Vercel and backend hosted on Render.
+- **Brevo Email API Integration**: Replaced raw SMTP with the Brevo HTTP API for guaranteed email delivery, bypassing standard cloud firewall port blocks (587).
+- **Vercel Serverless Hosting Support**: Created `vercel.json` configurations to handle React client-side routing on Vercel.
 - **Dynamic Database String Routing**: Added support for standard unified `DATABASE_URL` connection strings, enabling out-of-the-box integrations with serverless cloud databases like Neon.tech or Supabase.
 - **In-Memory Storage Schema**: Added `qr_code_base64` and `badge_pdf_base64` fields to the `visits` table database model.
 - **In-Memory Email Attachments**: Upgraded the email dispatch utility to dynamically construct and attach PDF passes directly from base64 memory buffers.
