@@ -67,7 +67,7 @@ class User(Base):
     )
 
     profile_photo_path = Column(
-        String(500),
+        String,
         nullable=True
     )
 
