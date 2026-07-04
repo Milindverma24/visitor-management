@@ -564,8 +564,8 @@ export default function VisitorPortal() {
         </div>
       </header>
 
-      {/* ZERO-SCROLL MAIN CONTAINER */}
-      <main className="flex-1 w-full max-w-[1500px] mx-auto p-4 md:p-8 overflow-hidden flex items-center justify-center z-10">
+      {/* MAIN CONTAINER */}
+      <main className="flex-1 w-full max-w-[1500px] mx-auto p-4 md:p-8 overflow-y-auto md:overflow-hidden flex items-center justify-center z-10">
         <AnimatePresence mode="wait">
           
           {isSubmitted ? (
@@ -1004,11 +1004,11 @@ export default function VisitorPortal() {
               initial={{ opacity: 0, x: 20 }}
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, scale: 0.98 }}
-              className="w-full h-full bg-white/95 backdrop-blur-md border border-slate-200 rounded-3xl shadow-2xl flex flex-col md:flex-row overflow-hidden"
+              className="w-full h-full bg-white/95 backdrop-blur-md border border-slate-200 rounded-3xl shadow-2xl flex flex-col md:flex-row overflow-y-auto md:overflow-hidden"
             >
               
               {/* LEFT COLUMN: FORM FIELDS */}
-              <form id="visitor-form" onSubmit={handleSubmitRequest} className="w-full md:w-[70%] p-8 flex flex-col h-full relative">
+              <form id="visitor-form" onSubmit={handleSubmitRequest} className="w-full md:w-[70%] p-8 flex flex-col h-auto md:h-full relative shrink-0">
                 <div className="flex items-center justify-between mb-8 shrink-0 border-b border-slate-100 pb-4">
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 rounded-full bg-blue-50 flex items-center justify-center">
@@ -1197,7 +1197,7 @@ export default function VisitorPortal() {
               </form>
 
               {/* RIGHT COLUMN: IDENTITY & SUBMIT */}
-              <div className="w-full md:w-[30%] bg-slate-50/80 border-l border-slate-200 p-6 flex flex-col h-full justify-between shrink-0">
+              <div className="w-full md:w-[30%] bg-slate-50/80 md:border-l md:border-t-0 border-t border-slate-200 p-6 flex flex-col h-auto md:h-full justify-between shrink-0">
                 
                 {/* Photo Capture Section */}
                 <div className="flex flex-col items-center">
