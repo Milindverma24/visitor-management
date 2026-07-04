@@ -1,7 +1,7 @@
 ##################################################
 # IMPORTS
 ##################################################
-
+from app.database.database import Base, engine
 from fastapi import FastAPI, Depends
 from sqlalchemy.orm import Session
 
@@ -113,18 +113,22 @@ app.mount("/static", StaticFiles(directory="app/static"), name="static")
 
 @app.on_event("startup")
 def startup_event():
+
+    # Create all database tables
+    Base.metadata.create_all(bind=engine)
+
     dirs = [
         "uploads/visitor_photos",
         "uploads/photos",
         "uploads/qrcodes",
         "uploads/badges",
         "uploads/documents",
-
         "uploads/passes",
         "uploads/resumes",
         "uploads/certificates",
         "uploads/company_docs"
     ]
+
     for d in dirs:
         os.makedirs(d, exist_ok=True)
 
