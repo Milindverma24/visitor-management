@@ -12,14 +12,18 @@ from app.core.config import settings
 # DATABASE URL
 ##################################################
 
-DATABASE_URL = (
-    f"postgresql://"
-    f"{settings.POSTGRES_USER}:"
-    f"{settings.POSTGRES_PASSWORD}@"
-    f"{settings.POSTGRES_HOST}:"
-    f"{settings.POSTGRES_PORT}/"
-    f"{settings.POSTGRES_DB}"
-)
+import os
+
+DATABASE_URL = os.getenv("DATABASE_URL")
+if not DATABASE_URL:
+    DATABASE_URL = (
+        f"postgresql://"
+        f"{settings.POSTGRES_USER}:"
+        f"{settings.POSTGRES_PASSWORD}@"
+        f"{settings.POSTGRES_HOST}:"
+        f"{settings.POSTGRES_PORT}/"
+        f"{settings.POSTGRES_DB}"
+    )
 
 ##################################################
 # SQLALCHEMY ENGINE

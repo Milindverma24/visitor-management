@@ -1,15 +1,24 @@
 ##################################################
 # VENDOR MODEL
 ##################################################
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, Text
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, Text, ForeignKey
+from sqlalchemy.orm import relationship
 from datetime import datetime
 from app.database.database import Base
+from app.models.plant import Plant
 
 
 class Vendor(Base):
     __tablename__ = "vendors"
 
     id = Column(Integer, primary_key=True, index=True)
+
+    plant_id = Column(
+        Integer,
+        ForeignKey("plants.id"),
+        nullable=True
+    )
+    plant = relationship("Plant")
 
     # Company Info
     vendor_name = Column(String(255), nullable=False, index=True)

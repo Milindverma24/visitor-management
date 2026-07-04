@@ -306,7 +306,7 @@ const Dashboard = () => {
           <CardHeader className="border-b border-slate-100 pb-4 bg-slate-50/50">
             <CardTitle className="text-sm font-bold text-slate-800 uppercase tracking-wide flex justify-between items-center">
               <span>Recently Approved Sequence</span>
-              <Badge variant="outline" className="text-xs bg-white text-slate-500 font-normal">Last {recentApprovals.length} Records</Badge>
+              <Badge variant="secondary" className="text-xs bg-white text-slate-500 font-normal border border-slate-200">Last {recentApprovals.length} Records</Badge>
             </CardTitle>
           </CardHeader>
           <CardContent className="p-0">

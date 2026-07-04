@@ -4,7 +4,8 @@ from sqlalchemy import (
     String,
     DateTime,
     ForeignKey,
-    Enum
+    Enum,
+    Boolean
 )
 import enum
 from sqlalchemy.orm import relationship
@@ -13,6 +14,7 @@ from datetime import datetime
 
 from app.database.database import Base
 from app.models.department import Department
+from app.models.plant import Plant
 
 class PassType(str, enum.Enum):
     VISITOR_PASS = "VISITOR_PASS"
@@ -49,6 +51,13 @@ class Visit(Base):
         nullable=True
     )
     department = relationship("Department")
+
+    plant_id = Column(
+        Integer,
+        ForeignKey("plants.id"),
+        nullable=True
+    )
+    plant = relationship("Plant")
 
     pass_type = Column(
         Enum(PassType),
@@ -106,6 +115,11 @@ class Visit(Base):
         default=0
     )
 
+    created_by_employee = Column(
+        Boolean,
+        default=False
+    )
+
     check_in_time = Column(
         DateTime,
         nullable=True
@@ -155,5 +169,15 @@ class Visit(Base):
 
     gate_number = Column(
         String(50),
+        nullable=True
+    )
+
+    qr_code_base64 = Column(
+        String,
+        nullable=True
+    )
+
+    badge_pdf_base64 = Column(
+        String,
         nullable=True
     )

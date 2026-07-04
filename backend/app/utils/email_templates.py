@@ -124,3 +124,84 @@ def render_checkout_email(visitor_name: str, checkout_time: str, company_logo_ur
         checkout_time=checkout_time,
         company_logo_url=company_logo_url
     )
+
+APPROVAL_REQUEST_TEMPLATE = """
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        """ + IGL_CSS + """
+        .action-buttons { text-align: center; margin: 30px 0; }
+        .btn { display: inline-block; padding: 12px 24px; font-weight: bold; text-decoration: none; border-radius: 6px; margin: 0 10px; color: white !important; }
+        .btn-approve { background-color: #10b981; }
+        .btn-reject { background-color: #ef4444; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <img src="{{ company_logo_url }}" alt="Logo" />
+            <h2>Visitor Approval Request</h2>
+        </div>
+        <div class="content">
+            <p>Dear <strong>{{ employee_name }}</strong>,</p>
+            <p>A new visitor request has been submitted and requires your action.</p>
+            
+            <div class="details">
+                <p><strong>Visitor Name:</strong> {{ visitor_name }}</p>
+                <p><strong>Contact Number:</strong> {{ mobile_number }}</p>
+                <p><strong>Organization:</strong> {{ organization }}</p>
+                <p><strong>Purpose of Visit:</strong> {{ purpose }}</p>
+                <p><strong>Date of Visit:</strong> {{ visit_date }}</p>
+                <p><strong>Department:</strong> {{ department }}</p>
+            </div>
+            
+            <p>Please review the request and choose one of the following actions:</p>
+            
+            <div class="action-buttons">
+                <a href="{{ approve_url }}" class="btn btn-approve">APPROVE REQUEST</a>
+                <a href="{{ reject_url }}" class="btn btn-reject">REJECT REQUEST</a>
+            </div>
+            
+            <p style="font-size: 12px; color: #64748b; margin-top: 30px; border-top: 1px dashed #e2e8f0; padding-top: 15px; text-align: left;">
+                <strong>If the buttons above are not clickable:</strong><br>
+                Copy and paste the corresponding link below into your browser address bar:<br><br>
+                <strong>Approve:</strong><br>
+                <span style="word-break: break-all; font-family: monospace; font-size: 11px; color: #2563eb;">{{ approve_url }}</span><br><br>
+                <strong>Reject:</strong><br>
+                <span style="word-break: break-all; font-family: monospace; font-size: 11px; color: #dc2626;">{{ reject_url }}</span>
+            </p>
+        </div>
+        <div class="footer">
+            <p>This is an automated message from the <strong>Visitor Management System</strong>.</p>
+        </div>
+    </div>
+</body>
+</html>
+"""
+
+def render_approval_request_email(
+    employee_name: str,
+    visitor_name: str,
+    mobile_number: str,
+    organization: str,
+    purpose: str,
+    visit_date: str,
+    department: str,
+    approve_url: str,
+    reject_url: str,
+    company_logo_url: str = "https://res.cloudinary.com/dngurjsdw/image/upload/v1780343367/logo1_1_giuuki.png"
+) -> str:
+    template = Template(APPROVAL_REQUEST_TEMPLATE)
+    return template.render(
+        employee_name=employee_name,
+        visitor_name=visitor_name,
+        mobile_number=mobile_number,
+        organization=organization,
+        purpose=purpose,
+        visit_date=visit_date,
+        department=department,
+        approve_url=approve_url,
+        reject_url=reject_url,
+        company_logo_url=company_logo_url
+    )

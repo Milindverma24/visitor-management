@@ -3,6 +3,7 @@ from typing import Optional
 from datetime import datetime
 
 from app.schemas.department import DepartmentResponse
+from app.schemas.plant import PlantResponse
 
 
 ##################################################
@@ -63,6 +64,7 @@ class UserResponse(UserBase):
     created_at:           datetime
     updated_at:           datetime
     department:           Optional[DepartmentResponse] = None
+    plant:                Optional[PlantResponse] = None
 
     class Config:
         from_attributes = True

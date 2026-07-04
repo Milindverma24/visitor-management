@@ -5,12 +5,20 @@ from sqlalchemy import Column, Integer, String, Boolean, DateTime, Text, Foreign
 from sqlalchemy.orm import relationship
 from datetime import datetime
 from app.database.database import Base
+from app.models.plant import Plant
 
 
 class Contractor(Base):
     __tablename__ = "contractors"
 
     id = Column(Integer, primary_key=True, index=True)
+
+    plant_id = Column(
+        Integer,
+        ForeignKey("plants.id"),
+        nullable=True
+    )
+    plant = relationship("Plant")
 
     # Company Info
     company_name = Column(String(255), nullable=False, index=True)
@@ -56,7 +64,6 @@ class ContractorEmployee(Base):
     # Personal Info
     full_name = Column(String(255), nullable=False)
     phone_number = Column(String(20), nullable=True)
-    aadhaar_number = Column(String(255), nullable=True)
     designation = Column(String(255), nullable=True)
 
     # Photo

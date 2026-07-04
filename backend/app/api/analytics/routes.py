@@ -4,7 +4,7 @@ from sqlalchemy import func
 from app.database.session import get_db
 from app.models.visit import Visit
 from app.models.visitor import Visitor
-from app.models.vehicle import Vehicle
+
 from app.models.material import Material
 from datetime import datetime, date, timedelta
 
@@ -46,10 +46,10 @@ def get_analytics_dashboard(db: Session = Depends(get_db)):
 
     # Total entities
     total_visitors = db.query(Visitor).count()
-    total_vehicles = db.query(Vehicle).count()
+
     total_materials = db.query(Material).count()
     blacklisted_visitors = db.query(Visitor).filter(Visitor.is_blacklisted == True).count()
-    blacklisted_vehicles = db.query(Vehicle).filter(Vehicle.is_blacklisted == True).count()
+
 
     # Last 7 days trend
     weekly_trend = []
@@ -76,10 +76,10 @@ def get_analytics_dashboard(db: Session = Depends(get_db)):
             "approved": total_approved,
             "rejected": total_rejected,
             "total_visitors_registered": total_visitors,
-            "total_vehicles_registered": total_vehicles,
+
             "total_materials": total_materials,
             "blacklisted_visitors": blacklisted_visitors,
-            "blacklisted_vehicles": blacklisted_vehicles
+
         },
         "weekly_trend": weekly_trend,
         "generated_at": datetime.utcnow().isoformat()

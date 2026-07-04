@@ -8,9 +8,11 @@ import { Search, Plus, Edit, Trash2 } from "lucide-react";
 import toast from "react-hot-toast";
 
 import { getDepartments, createDepartment, updateDepartment, deleteDepartment } from "@/services/departmentService";
+import { getPublicPlants } from "@/services/plantService";
 
 const Departments = () => {
   const [departments, setDepartments] = useState<any[]>([]);
+  const [plants, setPlants] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -22,23 +24,28 @@ const Departments = () => {
     head: "",
     email: "",
     phone: "",
-    is_active: true
+    is_active: true,
+    plant_id: ""
   });
 
-  const fetchDepartments = async () => {
+  const fetchData = async () => {
     try {
       setIsLoading(true);
-      const res = await getDepartments();
-      setDepartments(res.data);
+      const [deptRes, plantRes] = await Promise.all([
+        getDepartments(),
+        getPublicPlants()
+      ]);
+      setDepartments(deptRes.data);
+      setPlants(plantRes.data);
     } catch (error) {
-      toast.error("Failed to fetch departments");
+      toast.error("Failed to fetch data");
     } finally {
       setIsLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchDepartments();
+    fetchData();
   }, []);
 
   const handleOpenModal = (dept: any = null) => {
@@ -50,11 +57,12 @@ const Departments = () => {
         head: dept.head || "",
         email: dept.email || "",
         phone: dept.phone || "",
-        is_active: dept.is_active
+        is_active: dept.is_active,
+        plant_id: dept.plant_id ? dept.plant_id.toString() : "GLOBAL"
       });
     } else {
       setEditingDept(null);
-      setFormData({ name: "", code: "", head: "", email: "", phone: "", is_active: true });
+      setFormData({ name: "", code: "", head: "", email: "", phone: "", is_active: true, plant_id: "GLOBAL" });
     }
     setIsModalOpen(true);
   };
@@ -75,15 +83,19 @@ const Departments = () => {
   const handleSubmit = async (e: any) => {
     e.preventDefault();
     try {
+      const payload = {
+        ...formData,
+        plant_id: (formData.plant_id && formData.plant_id !== "GLOBAL") ? parseInt(formData.plant_id) : null
+      };
       if (editingDept) {
-        await updateDepartment(editingDept.id, formData);
+        await updateDepartment(editingDept.id, payload);
         toast.success("Department updated");
       } else {
-        await createDepartment(formData);
+        await createDepartment(payload);
         toast.success("Department created");
       }
       handleCloseModal();
-      fetchDepartments();
+      fetchData();
     } catch (error: any) {
       toast.error(error.response?.data?.detail || "An error occurred");
     }
@@ -94,7 +106,7 @@ const Departments = () => {
     try {
       await deleteDepartment(id);
       toast.success("Department deleted");
-      fetchDepartments();
+      fetchData();
     } catch (error) {
       toast.error("Failed to delete department");
     }
@@ -172,16 +184,20 @@ const Departments = () => {
                 <TableRow>
                   <TableHead className="font-semibold text-slate-600 pl-6 whitespace-nowrap">Code</TableHead>
                   <TableHead className="font-semibold text-slate-600 whitespace-nowrap min-w-[180px]">Name</TableHead>
+                  <TableHead className="font-semibold text-slate-600 whitespace-nowrap">Location</TableHead>
                   <TableHead className="font-semibold text-slate-600 whitespace-nowrap">Head</TableHead>
                   <TableHead className="font-semibold text-slate-600 whitespace-nowrap">Status</TableHead>
                   <TableHead className="font-semibold text-slate-600 pr-6 text-right whitespace-nowrap">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filtered.map((dept) => (
+                {filtered.map((dept) => {
+                  const plantName = plants.find(p => p.id === dept.plant_id)?.plant_name || "Global / Unassigned";
+                  return (
                   <TableRow key={dept.id} className="hover:bg-slate-50/50 transition-colors">
                     <TableCell className="pl-6 py-4 font-mono whitespace-nowrap">{dept.code}</TableCell>
                     <TableCell className="font-medium break-words">{dept.name}</TableCell>
+                    <TableCell className="whitespace-nowrap text-slate-500">{plantName}</TableCell>
                     <TableCell className="whitespace-nowrap">{dept.head || "N/A"}</TableCell>
                     <TableCell className="whitespace-nowrap">
                       {dept.is_active ? (
@@ -199,7 +215,8 @@ const Departments = () => {
                       </Button>
                     </TableCell>
                   </TableRow>
-                ))}
+                  );
+                })}
                 {filtered.length === 0 && !isLoading && (
                   <TableRow>
                     <TableCell colSpan={5} className="text-center py-12 text-slate-400">
@@ -229,6 +246,23 @@ const Departments = () => {
               <Input label="Email" name="email" type="email" value={formData.email} onChange={handleInputChange} />
               <Input label="Phone" name="phone" type="tel" value={formData.phone} onChange={handleInputChange} />
               
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium text-slate-700">Location (Plant)</label>
+                <select
+                  name="plant_id"
+                  value={formData.plant_id}
+                  onChange={handleInputChange}
+                  className="flex h-10 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 outline-none"
+                  required
+                >
+                  <option value="" disabled>Select Location</option>
+                  <option value="GLOBAL">Global / All Locations</option>
+                  {plants.map(p => (
+                    <option key={p.id} value={p.id}>{p.plant_name} ({p.plant_code})</option>
+                  ))}
+                </select>
+              </div>
+
               <div className="flex items-center space-x-2">
                 <input 
                   type="checkbox" 

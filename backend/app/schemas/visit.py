@@ -15,3 +15,4 @@ class VisitCreate(BaseModel):
     valid_up_to: datetime | None = None
     accompanied_by_count: int | None = 0
     pass_type: str | None = "VISITOR_PASS"
+    plant_id: int | None = None

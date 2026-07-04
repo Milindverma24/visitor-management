@@ -59,25 +59,8 @@ class Settings(BaseSettings):
 
     EMAIL_USER: str | None = None
     EMAIL_PASSWORD: str | None = None
+    BACKEND_URL: str | None = None
 
-    ##################################################
-    # TELEGRAM
-    ##################################################
-
-    TELEGRAM_BOT_TOKEN: str | None = None
-    TELEGRAM_ADMIN_CHAT_ID: str | None = None
-    TELEGRAM_SECURITY_CHAT_ID: str | None = None
-    TELEGRAM_HR_CHAT_ID: str | None = None
-    TELEGRAM_IT_CHAT_ID: str | None = None
-    TELEGRAM_PRODUCTION_CHAT_ID: str | None = None
-    TELEGRAM_MAINTENANCE_CHAT_ID: str | None = None
-    TELEGRAM_SAFETY_CHAT_ID: str | None = None
-    TELEGRAM_FINANCE_CHAT_ID: str | None = None
-    TELEGRAM_SALES_CHAT_ID: str | None = None
-    TELEGRAM_MARKETING_CHAT_ID: str | None = None
-    TELEGRAM_LEGAL_CHAT_ID: str | None = None
-    TELEGRAM_OPERATIONS_CHAT_ID: str | None = None
-    TELEGRAM_RECEPTION_CHAT_ID: str | None = None
 
     ##################################################
     # PYDANTIC SETTINGS

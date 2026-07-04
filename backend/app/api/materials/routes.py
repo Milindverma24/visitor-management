@@ -5,6 +5,7 @@ from pydantic import BaseModel
 from datetime import datetime
 from app.database.session import get_db
 from app.models.material import Material, MaterialType
+from app.security.dependencies import get_current_user
 
 router = APIRouter()
 
@@ -16,7 +17,7 @@ class MaterialCreate(BaseModel):
     description: Optional[str] = None
     vendor_name: Optional[str] = None
     vendor_id: Optional[int] = None
-    vehicle_number: Optional[str] = None
+
     driver_name: Optional[str] = None
     department_id: Optional[int] = None
     invoice_number: Optional[str] = None
@@ -30,9 +31,13 @@ def get_materials(
     status: Optional[str] = None,
     skip: int = 0,
     limit: int = 100,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
 ):
     query = db.query(Material)
+    if current_user.get("role") != "CORPORATE_SUPER_ADMIN":
+        query = query.filter(Material.plant_id == current_user.get("plant_id"))
+        
     if material_type:
         query = query.filter(Material.material_type == material_type)
     if department_id:
@@ -49,11 +54,28 @@ def get_material(material_id: int, db: Session = Depends(get_db)):
     return m
 
 @router.post("/")
-def create_material(material: MaterialCreate, db: Session = Depends(get_db)):
+def create_material(
+    material: MaterialCreate, 
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
+):
     new_m = Material(**material.dict())
-    # Generate gate pass number
+    if current_user.get("role") != "CORPORATE_SUPER_ADMIN":
+        new_m.plant_id = current_user.get("plant_id")
+    # Generate gate pass number with plant prefix
+    plant_prefix = "IGL"
+    if new_m.plant_id:
+        from app.models.plant import Plant
+        plant_obj = db.query(Plant).filter(Plant.id == new_m.plant_id).first()
+        if plant_obj and plant_obj.plant_code:
+            code = plant_obj.plant_code.upper()
+            if code in ["KP", "KSP"]:
+                plant_prefix = "KASP"
+            else:
+                plant_prefix = code
+
     count = db.query(Material).count()
-    new_m.gate_pass_number = f"IGL-{datetime.utcnow().year}-MAT-{str(count + 1).zfill(5)}"
+    new_m.gate_pass_number = f"{plant_prefix}-{datetime.utcnow().year}-MAT-{str(count + 1).zfill(5)}"
     db.add(new_m)
     db.commit()
     db.refresh(new_m)

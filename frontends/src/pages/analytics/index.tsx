@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { BarChart3, TrendingUp, Users, Truck, Package, ShieldOff, Clock, CheckCircle, XCircle, AlertTriangle } from "lucide-react";
+import { BarChart3, TrendingUp, Users, Package, ShieldOff, Clock, CheckCircle, XCircle, AlertTriangle } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/Card";
 import api from "@/services/api";
 
@@ -44,7 +44,6 @@ const Analytics = () => {
     { label: "Total Approved", value: data.all_time.approved, icon: CheckCircle, color: "text-green-600" },
     { label: "Rejected", value: data.all_time.rejected, icon: XCircle, color: "text-red-600" },
     { label: "Visitors Registered", value: data.all_time.total_visitors_registered, icon: Users, color: "text-blue-600" },
-    { label: "Vehicles Registered", value: data.all_time.total_vehicles_registered, icon: Truck, color: "text-purple-600" },
     { label: "Blacklisted Visitors", value: data.all_time.blacklisted_visitors, icon: ShieldOff, color: "text-red-500" },
   ];
 

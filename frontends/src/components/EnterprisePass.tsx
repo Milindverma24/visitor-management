@@ -39,19 +39,7 @@ const getTheme = (category: string) => {
     };
   }
   
-  if (cat.includes("DRIVER") || cat.includes("VEHICLE") || cat.includes("TRANSPORTER")) {
-    return {
-      headerBg: "#0F172A", // Dark Navy
-      headerText: "#FFFFFF",
-      cardBg: "#FFF7ED", // Soft Safety Orange / Amber-50
-      accentColor: "#EA580C", // Orange-600 (Safety Orange)
-      badgeBg: "#EA580C",
-      badgeText: "#FFFFFF",
-      borderColor: "border-[#EA580C]",
-      textColor: "text-slate-900",
-      labelColor: "text-slate-500"
-    };
-  }
+
   
   if (cat.includes("EMPLOYEE") || cat.includes("STAFF")) {
     return {
@@ -109,286 +97,154 @@ const getTheme = (category: string) => {
 export const EnterprisePass: React.FC<EnterprisePassProps> = ({ visit, photoUrl }) => {
   if (!visit) return null;
 
-  const isInterviewPass = visit.passType === "INTERVIEW_PASS" || (visit.cardId && visit.cardId.startsWith("INT/")) || visit.category === "CANDIDATE";
-  const isMeetingPass = visit.passType === "MEETING_PASS" || (visit.cardId && visit.cardId.startsWith("MTG/"));
-  const isVehiclePass = visit.passType === "VENDOR_PASS" || visit.category === "DRIVER";
-  
   // Resolve category name for theme lookup
-  const categoryName = isInterviewPass ? "CANDIDATE" : isMeetingPass ? "MEETING" : visit.category || "VISITOR";
+  const categoryName = visit.category || "VISITOR";
   const theme = getTheme(categoryName);
 
-  // Extract Vehicle Number and Pure Purpose
-  const vehicleMatch = visit.purpose?.match(/\[(.*?)\]/);
-  const vehicleNumber = vehicleMatch ? vehicleMatch[1] : "N/A";
-  const purePurpose = visit.purpose?.replace(/\[.*?\]\s*-\s*/, "") || "MATERIAL DELIVERY";
+
 
   // Photo resolution
   const displayPhoto = photoUrl || visit.photoPath || visit.visitorPhotoPath || visit.candidatePhotoPath || "";
 
   return (
     <Card 
-      className={`w-full max-w-3xl mx-auto overflow-hidden border-2 shadow-xl text-black font-sans print:shadow-none print:border-none print:w-full print:max-w-none ${theme.borderColor}`}
-      style={{ backgroundColor: theme.cardBg, WebkitPrintColorAdjust: "exact", printColorAdjust: "exact" }}
+      className={`relative mx-auto overflow-hidden shadow-xl text-black font-sans print-only print:shadow-none print:border-none border-2 ${theme.borderColor}`}
+      style={{ 
+        backgroundColor: theme.cardBg, 
+        WebkitPrintColorAdjust: "exact", 
+        printColorAdjust: "exact",
+        width: "9.1cm",
+        height: "6.1cm",
+        display: "flex",
+        flexDirection: "column",
+        boxSizing: "border-box"
+      }}
     >
-      <div className="p-5 flex flex-col h-full min-h-[450px]">
-        {/* Header Banner */}
+      {/* Header Banner */}
+      <div 
+        className="flex items-center justify-between px-2 py-1 border-b"
+        style={{ backgroundColor: theme.headerBg, color: theme.headerText, borderColor: theme.accentColor }}
+      >
+        <div className="flex items-center gap-2">
+          <div className="bg-white p-0.5 rounded flex items-center justify-center">
+            <img src="/uploads/company_logo.png" alt="IGL" className="h-4 w-auto object-contain" />
+          </div>
+          <div className="text-left font-black text-[8px] tracking-tight uppercase leading-tight">
+            Indian Glycols Limited - Kashipur
+          </div>
+        </div>
         <div 
-          className="flex items-center justify-between gap-4 p-4 rounded-xl mb-6 shadow-sm border-b"
-          style={{ backgroundColor: theme.headerBg, color: theme.headerText, borderColor: theme.accentColor }}
+          className="px-1.5 py-0.5 rounded text-[7px] font-black tracking-wider uppercase font-mono text-center shadow-sm"
+          style={{ backgroundColor: theme.badgeBg, color: theme.badgeText }}
         >
-          <div className="flex items-center gap-3">
-            <div className="bg-white p-1 rounded-lg flex items-center justify-center shadow-md">
-              <img src="/uploads/company_logo.png" alt="IGL" className="h-10 w-auto object-contain" />
+          {categoryName}
+        </div>
+      </div>
+      
+      {/* Main Content Body */}
+      <div className="flex-1 flex p-1.5 gap-2 items-stretch">
+        
+        {/* Left Side: Details Grid */}
+        <div className="flex-1 flex flex-col justify-between">
+          <div className="text-[10px] font-extrabold text-slate-900 uppercase leading-tight truncate w-full mb-1">
+            {visit.title || ''} {visit.visitorName}
+          </div>
+          
+          <div className="w-full text-[5.5px] space-y-[1px] font-medium text-left leading-[1.05]">
+            <div className="flex justify-between items-start border-b border-slate-200 pb-[1px]">
+              <span className="text-slate-500 uppercase font-bold">Pass ID:</span>
+              <span className="font-extrabold text-slate-900 font-mono">{visit.cardId || 'N/A'}</span>
             </div>
-            <div className="text-left font-black text-sm sm:text-base tracking-wide uppercase">
-              Indian Glycols Limited - Kashipur
+            <div className="flex justify-between items-start border-b border-slate-200 pb-[1px]">
+              <span className="text-slate-500 uppercase font-bold">Phone:</span>
+              <span className="font-extrabold text-slate-900 truncate max-w-[4cm] text-right">{visit.phone}</span>
+            </div>
+            <div className="flex justify-between items-start border-b border-slate-200 pb-[1px]">
+              <span className="text-slate-500 uppercase font-bold">Company:</span>
+              <span className="font-extrabold text-slate-900 truncate max-w-[4cm] text-right">{visit.company || 'N/A'}</span>
+            </div>
+            <div className="flex justify-between items-start border-b border-slate-200 pb-[1px]">
+              <span className="text-slate-500 uppercase font-bold">To Meet:</span>
+              <span className="font-extrabold text-slate-900 truncate max-w-[4cm] text-right">{visit.hostEmployee ? visit.hostEmployee.split('(')[0].trim() : 'N/A'}</span>
+            </div>
+            <div className="flex justify-between items-start border-b border-slate-200 pb-[1px]">
+              <span className="text-slate-500 uppercase font-bold">Destination:</span>
+              <span className="font-extrabold text-slate-900 truncate max-w-[4cm] text-right">{visit.upTo || visit.department || 'Plant'}</span>
+            </div>
+            <div className="flex justify-between items-start border-b border-slate-200 pb-[1px]">
+              <span className="text-slate-500 uppercase font-bold">Purpose:</span>
+              <span className="font-extrabold text-slate-900 truncate max-w-[4cm] text-right">{visit.purpose || 'Meeting'}</span>
+            </div>
+            <div className="flex justify-between items-start border-b border-slate-200 pb-[1px]">
+              <span className="text-slate-500 uppercase font-bold">Accessories:</span>
+              <span className="font-extrabold text-slate-900 truncate max-w-[4cm] text-right">{visit.accessories || 'None'}</span>
+            </div>
+            <div className="flex justify-between items-start border-b border-slate-200 pb-[1px]">
+              <span className="text-slate-500 uppercase font-bold">Accmp by:</span>
+              <span className="font-extrabold text-slate-900 truncate max-w-[4cm] text-right">{visit.accompaniedByCount ? `${visit.accompaniedByCount}` : '0'}</span>
+            </div>
+            <div className="flex justify-between items-start border-b border-slate-200 pb-[1px]">
+              <span className="text-slate-500 uppercase font-bold">Address:</span>
+              <span className="font-extrabold text-slate-900 truncate max-w-[4cm] text-right">{visit.address || 'N/A'}</span>
+            </div>
+            <div className="flex justify-between items-start border-b border-slate-200 pb-[1px]">
+              <span className="text-slate-500 uppercase font-bold">Valid UpTo:</span>
+              <span className="font-extrabold text-slate-900 font-mono">{visit.validUpTo ? visit.validUpTo.replace('T', ' ').substring(0, 16) : 'N/A'}</span>
             </div>
           </div>
-
-          <div 
-            className="px-3.5 py-1.5 rounded-lg text-xs font-black tracking-widest uppercase font-mono shadow-sm"
-            style={{ backgroundColor: theme.badgeBg, color: theme.badgeText }}
-          >
-            {isInterviewPass ? 'INTERVIEW PASS' : isMeetingPass ? 'MEETING PASS' : isVehiclePass ? 'VEHICLE PASS' : categoryName}
+          
+          <div className="text-[5px] text-slate-500 text-left leading-tight mt-1">
+             <span className="font-bold">Non-transferable.</span> Must be worn visibly.
           </div>
         </div>
         
-        <div className="flex flex-col sm:flex-row gap-6 mb-6">
-          {/* Left Details */}
-          <div className="flex-1 text-sm sm:text-base space-y-3 font-medium text-left">
-            {isInterviewPass ? (
-              // Interview specific fields
-              <>
-                <div className="grid grid-cols-[140px_1fr] items-start">
-                  <span className="text-slate-500 font-semibold uppercase text-[11px] tracking-wider">Pass Number</span>
-                  <span className="font-extrabold text-slate-900 font-mono">: {visit.cardId || 'N/A'}</span>
-                </div>
-                <div className="grid grid-cols-[140px_1fr] items-start">
-                  <span className="text-slate-500 font-semibold uppercase text-[11px] tracking-wider">Approval Number</span>
-                  <span className="font-extrabold text-slate-900 font-mono">: {visit.approvalNumber || 'N/A'}</span>
-                </div>
-                <div className="grid grid-cols-[140px_1fr] items-start">
-                  <span className="text-slate-500 font-semibold uppercase text-[11px] tracking-wider">Candidate Name</span>
-                  <span className="font-extrabold text-slate-900 uppercase">: {visit.visitorName || visit.candidate_name || 'N/A'}</span>
-                </div>
-                <div className="grid grid-cols-[140px_1fr] items-start">
-                  <span className="text-slate-500 font-semibold uppercase text-[11px] tracking-wider">Position Applied</span>
-                  <span className="font-extrabold text-slate-900 uppercase">: {visit.position || 'N/A'}</span>
-                </div>
-                <div className="grid grid-cols-[140px_1fr] items-start">
-                  <span className="text-slate-500 font-semibold uppercase text-[11px] tracking-wider">Department</span>
-                  <span className="font-extrabold text-slate-900 uppercase">: {visit.department || 'N/A'}</span>
-                </div>
-                <div className="grid grid-cols-[140px_1fr] items-start">
-                  <span className="text-slate-500 font-semibold uppercase text-[11px] tracking-wider">Interview Date/Time</span>
-                  <span className="font-extrabold text-slate-900 font-mono">: {visit.scheduledTime || 'N/A'}</span>
-                </div>
-                <div className="grid grid-cols-[140px_1fr] items-start">
-                  <span className="text-slate-500 font-semibold uppercase text-[11px] tracking-wider">Interviewer Name</span>
-                  <span className="font-extrabold text-slate-900 uppercase">: {visit.interviewerName || 'N/A'}</span>
-                </div>
-              </>
-            ) : isMeetingPass ? (
-              // Meeting specific fields
-              <>
-                <div className="grid grid-cols-[140px_1fr] items-start">
-                  <span className="text-slate-500 font-semibold uppercase text-[11px] tracking-wider">Pass Number</span>
-                  <span className="font-extrabold text-slate-900 font-mono">: {visit.cardId || 'N/A'}</span>
-                </div>
-                <div className="grid grid-cols-[140px_1fr] items-start">
-                  <span className="text-slate-500 font-semibold uppercase text-[11px] tracking-wider">Approval Number</span>
-                  <span className="font-extrabold text-slate-900 font-mono">: {visit.approvalNumber || 'N/A'}</span>
-                </div>
-                <div className="grid grid-cols-[140px_1fr] items-start">
-                  <span className="text-slate-500 font-semibold uppercase text-[11px] tracking-wider">Visitor Name</span>
-                  <span className="font-extrabold text-slate-900 uppercase">: {visit.visitorName || 'N/A'}</span>
-                </div>
-                <div className="grid grid-cols-[140px_1fr] items-start">
-                  <span className="text-slate-500 font-semibold uppercase text-[11px] tracking-wider">Company Name</span>
-                  <span className="font-extrabold text-slate-900 uppercase">: {visit.company || visit.companyName || 'N/A'}</span>
-                </div>
-                <div className="grid grid-cols-[140px_1fr] items-start">
-                  <span className="text-slate-500 font-semibold uppercase text-[11px] tracking-wider">Meeting Title</span>
-                  <span className="font-extrabold text-slate-900 uppercase">: {visit.purpose || visit.title || 'N/A'}</span>
-                </div>
-                <div className="grid grid-cols-[140px_1fr] items-start">
-                  <span className="text-slate-500 font-semibold uppercase text-[11px] tracking-wider">Host Employee</span>
-                  <span className="font-extrabold text-slate-900 uppercase">: {visit.hostEmployee || 'N/A'}</span>
-                </div>
-                <div className="grid grid-cols-[140px_1fr] items-start">
-                  <span className="text-slate-500 font-semibold uppercase text-[11px] tracking-wider">Meeting Room</span>
-                  <span className="font-extrabold text-slate-900 uppercase">: {visit.location || 'N/A'}</span>
-                </div>
-              </>
+        {/* Right Side: Photo and QR */}
+        <div className="flex flex-col items-center justify-between w-[2.2cm] shrink-0 border-l pl-2 border-slate-200">
+          {/* Photo Box */}
+          <div 
+            className="w-[2cm] h-[2cm] border-2 flex items-center justify-center bg-white overflow-hidden rounded-md shrink-0"
+            style={{ borderColor: theme.accentColor }}
+          >
+            {displayPhoto ? (
+              <img src={displayPhoto} alt="Photo" className="w-full h-full object-cover" />
             ) : (
-              // Standard Visitor & Vehicle fields
-              <>
-                <div className="grid grid-cols-[140px_1fr] items-start">
-                  <span className="text-slate-500 font-semibold uppercase text-[11px] tracking-wider">Pass ID</span>
-                  <span className="font-extrabold text-slate-900 font-mono">: {visit.cardId || 'N/A'}</span>
-                </div>
-                
-                <div className="grid grid-cols-[140px_1fr] items-start">
-                  <span className="text-slate-500 font-semibold uppercase text-[11px] tracking-wider">Entry Date/Time</span>
-                  <span className="font-extrabold text-slate-900 font-mono">: {visit.createdAt ? visit.createdAt.replace('T', ' ').substring(0, 16) : new Date().toLocaleString()}</span>
-                </div>
-                
-                <div className="grid grid-cols-[140px_1fr] items-start">
-                  <span className="text-slate-500 font-semibold uppercase text-[11px] tracking-wider">{isVehiclePass ? 'Driver Name' : 'Name'}</span>
-                  <span className="font-extrabold text-slate-900 uppercase">: {visit.title || ''} {visit.visitorName}</span>
-                </div>
-                
-                <div className="grid grid-cols-[140px_1fr] items-start">
-                  <span className="text-slate-500 font-semibold uppercase text-[11px] tracking-wider">{isVehiclePass ? 'Driver Phone' : 'Phone'}</span>
-                  <span className="font-extrabold text-slate-900 font-mono">
-                    : {visit.phone} 
-                    <span className="ml-6 text-slate-500 font-semibold uppercase text-[10px] tracking-wider">Mob Token:</span> {visit.mobileTokenNo || 'N/A'}
-                  </span>
-                </div>
-                
-                <div className="grid grid-cols-[140px_1fr] items-start">
-                  <span className="text-slate-500 font-semibold uppercase text-[11px] tracking-wider">{isVehiclePass ? 'Transport Co.' : 'Company'}</span>
-                  <span className="font-extrabold text-slate-900 uppercase">: {visit.company || 'N/A'}</span>
-                </div>
-
-                {isVehiclePass && (
-                  <div className="grid grid-cols-[140px_1fr] items-start">
-                    <span className="text-slate-500 font-semibold uppercase text-[11px] tracking-wider">Vehicle Number</span>
-                    <span className="font-black text-orange-700 font-mono text-lg">: {vehicleNumber}</span>
-                  </div>
-                )}
-                
-                {!isVehiclePass && (
-                  <div className="grid grid-cols-[140px_1fr] items-start">
-                    <span className="text-slate-500 font-semibold uppercase text-[11px] tracking-wider">Address</span>
-                    <span className="font-extrabold text-slate-900">: {visit.address || 'N/A'}</span>
-                  </div>
-                )}
-                
-                <div className="grid grid-cols-[140px_1fr] items-start">
-                  <span className="text-slate-500 font-semibold uppercase text-[11px] tracking-wider">Accessories</span>
-                  <span className="font-extrabold text-slate-900">: {visit.accessories || 'None'}</span>
-                </div>
-                
-                <div className="grid grid-cols-[140px_1fr] items-start">
-                  <span className="text-slate-500 font-semibold uppercase text-[11px] tracking-wider">Purpose</span>
-                  <span className="font-extrabold text-slate-900">
-                    : {isVehiclePass ? purePurpose : visit.purpose}
-                    <span className="ml-6 text-slate-500 font-semibold uppercase text-[10px] tracking-wider">Destination:</span> {visit.upTo || visit.department || 'Plant'}
-                  </span>
-                </div>
-                
-                <div className="grid grid-cols-[140px_1fr] items-start">
-                  <span className="text-slate-500 font-semibold uppercase text-[11px] tracking-wider">To Meet</span>
-                  <span className="font-extrabold text-slate-900">: {visit.hostEmployee}</span>
-                </div>
-                
-                <div className="grid grid-cols-[140px_1fr] items-start">
-                  <span className="text-slate-500 font-semibold uppercase text-[11px] tracking-wider">Valid UpTo</span>
-                  <span className="font-extrabold text-slate-900 font-mono">: {visit.validUpTo ? visit.validUpTo.replace('T', ' ').substring(0, 16) : 'N/A'}</span>
-                </div>
-                
-                <div className="grid grid-cols-[140px_1fr] items-start">
-                  <span className="text-slate-500 font-semibold uppercase text-[11px] tracking-wider">Accmp by</span>
-                  <span className="font-extrabold text-slate-900 font-mono">
-                    : {visit.accompaniedByCount || 0}
-                    <span className="ml-6 text-slate-500 font-semibold uppercase text-[10px] tracking-wider">Approved:</span> YES
-                  </span>
-                </div>
-              </>
+              <div className="text-slate-400 font-extrabold text-[8px] font-mono">PHOTO</div>
             )}
           </div>
           
-          {/* Right Photo & QR Code */}
-          <div className="flex flex-col gap-4 self-start shrink-0">
-            {/* Photo Box */}
-            <div 
-              className="w-40 h-40 border-2 flex items-center justify-center bg-white shadow-md overflow-hidden rounded-xl"
-              style={{ borderColor: theme.accentColor }}
-            >
-              {displayPhoto ? (
-                <img src={displayPhoto} alt="Identity Photo" className="w-full h-full object-cover" />
-              ) : (
-                <div className="text-slate-400 font-extrabold tracking-widest text-xs font-mono">PHOTO</div>
-              )}
+          {/* QR Code */}
+          {visit.cardId && (
+            <div className="p-0.5 bg-white border border-slate-200 rounded shrink-0 mb-0.5 mt-auto">
+              <QRCode value={visit.cardId || `PASS:${visit.id}`} size={42} level="M" />
             </div>
-            
-            {/* QR Code Box */}
-            <div 
-              className="w-40 h-40 border-2 bg-white p-2.5 flex items-center justify-center shadow-md rounded-xl"
-              style={{ borderColor: theme.accentColor }}
-            >
-              <QRCode 
-                value={visit.cardId || `PASS:${visit.id}`} 
-                size={130}
-                level="M"
-                viewBox={`0 0 130 130`}
-              />
-            </div>
-          </div>
+          )}
         </div>
 
-        {/* Notes & Signatures */}
-        <div className="mt-auto pt-4 border-t border-slate-350">
-          <div className="flex flex-col sm:flex-row justify-between gap-6">
-            {/* Notes */}
-            <div className="text-[10px] w-full sm:w-5/12 leading-tight font-medium text-slate-500 text-left">
-              {isInterviewPass ? (
-                <>
-                  <span className="font-bold text-slate-700 underline uppercase tracking-wider block mb-1">Interview Guidelines:</span>
-                  <ol className="list-decimal pl-4 space-y-0.5 font-semibold text-slate-600">
-                    <li>Please report to reception 15 mins before scheduled time.</li>
-                    <li>Carry original Aadhaar and educational certificates.</li>
-                    <li>Mobile phones are restricted inside plant areas.</li>
-                    <li>Follow safety guidelines and signs inside the premises.</li>
-                  </ol>
-                </>
-              ) : isMeetingPass ? (
-                <>
-                  <span className="font-bold text-slate-700 underline uppercase tracking-wider block mb-1">Safety Directive:</span>
-                  <ol className="list-decimal pl-4 space-y-0.5 font-semibold text-slate-600">
-                    <li>Please keep this pass visible at all times.</li>
-                    <li>Visitor must remain accompanied by the host employee.</li>
-                    <li>Photography and recording are strictly prohibited inside.</li>
-                    <li>Return the pass to security upon checkout.</li>
-                  </ol>
-                </>
-              ) : isVehiclePass ? (
-                <>
-                  <span className="font-bold text-slate-700 underline uppercase tracking-wider block mb-1">Safety Directive:</span>
-                  <ol className="list-decimal pl-4 space-y-0.5 font-semibold text-slate-600">
-                    <li>Speed limit inside the plant is strictly 10 km/h.</li>
-                    <li>Vehicle must be parked in designated areas only.</li>
-                    <li>Drivers must wear safety shoes & helmets in loading zones.</li>
-                    <li>Do not leave the engine idling while parked.</li>
-                  </ol>
-                </>
-              ) : (
-                <>
-                  <span className="font-bold text-slate-700 underline uppercase tracking-wider block mb-1">Safety Directive:</span>
-                  <ol className="list-decimal pl-4 space-y-0.5 font-semibold text-slate-600">
-                    <li>Please return the pass before leaving.</li>
-                    <li>In case of emergency please call reception at "8" extn.</li>
-                    <li>Entering in this plant floor at own risk.</li>
-                    <li>Strictly abide by hazardous zone mobile phone regulations.</li>
-                  </ol>
-                </>
-              )}
-            </div>
+      </div>
 
-            {/* Signatures */}
-            <div className="w-full sm:w-7/12 flex items-end justify-between text-xs font-bold pb-2 gap-4 text-slate-700">
-              <div className="text-center w-full border-t border-slate-300 border-dashed pt-2">
-                {isInterviewPass ? "Candidate" : isVehiclePass ? "Driver" : "Visitor"}
-              </div>
-              <div className="text-center w-full border-t border-slate-300 border-dashed pt-2">Authorized</div>
-              <div className="text-center w-full border-t border-slate-300 border-dashed pt-2">Host Approval</div>
-              <div className="text-center w-full flex flex-col items-center border-t border-slate-300 border-dashed pt-2">
-                <span>Security Gate</span>
-                <span className="text-[9px] font-mono font-normal mt-1 border-b border-slate-400 border-dashed min-w-[70px]">Out: ____</span>
-              </div>
-            </div>
+      {/* Footer: Instructions, Signatures, Check IN/OUT */}
+      <div className="flex flex-col border-t border-slate-300 mt-auto px-2 py-1 bg-slate-50 shrink-0">
+        <div className="flex justify-between items-end gap-2">
+          {/* Instructions */}
+          <div className="text-[4.5px] leading-[1.3] text-slate-500 w-[35%]">
+            <span className="font-bold underline text-slate-700">Safety Directive:</span><br/>
+            1. Return pass at gate upon exit.<br/>
+            2. Follow safety & mobile guidelines.<br/>
+            3. Enter plant floor at own risk.
           </div>
+          
+          {/* Signatures */}
+          <div className="flex-1 flex justify-between items-end text-[5px] font-bold text-slate-700 h-full pb-[2px] ml-1">
+            <div className="border-t border-slate-400 border-dashed w-12 text-center pt-[1px]">Visitor</div>
+            <div className="border-t border-slate-400 border-dashed w-12 text-center pt-[1px]">Host</div>
+            <div className="border-t border-slate-400 border-dashed w-14 text-center pt-[1px]">Security Gate</div>
+          </div>
+        </div>
+        
+        {/* Check-in / Out Times */}
+        <div className="flex justify-between mt-[4px] border-t border-slate-200 pt-[2px] text-[5px] font-mono font-semibold text-slate-600">
+          <span>IN: {visit.createdAt ? visit.createdAt.replace('T', ' ').substring(0, 16) : '____-___-___ __:__'}</span>
+          <span>OUT: {visit.checkOutAt ? visit.checkOutAt.replace('T', ' ').substring(0, 16) : '____-___-___ __:__'}</span>
         </div>
       </div>
     </Card>

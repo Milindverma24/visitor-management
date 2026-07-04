@@ -4,24 +4,41 @@ import { Button } from "@/components/ui/Button";
 import { Download, FileText, Table as TableIcon } from "lucide-react";
 import toast from "react-hot-toast";
 import api from "@/services/api";
-
 const Reports = () => {
+  const [userProfile, setUserProfile] = useState<any>(null);
   const [departments, setDepartments] = useState<any[]>([]);
+  const [plants, setPlants] = useState<any[]>([]);
   const [filter, setFilter] = useState({
     status: "",
     department_id: "",
+    plant_id: "",
   });
 
   useEffect(() => {
-    const fetchDepts = async () => {
+    const fetchDeptsAndPlants = async () => {
       try {
-        const res = await api.get("/api/departments/");
-        setDepartments(res.data);
+        const [deptRes, plantRes] = await Promise.all([
+          api.get("/api/departments/"),
+          api.get("/api/plants/")
+        ]);
+        setDepartments(deptRes.data.filter((d: any) => d.is_active !== false));
+        setPlants(plantRes.data.filter((p: any) => p.is_active !== false));
       } catch (e) {
         console.error(e);
       }
     };
-    fetchDepts();
+    const fetchProfile = async () => {
+      try {
+        const res = await api.get("/api/auth/me");
+        if (res.data.success && res.data.user) {
+          setUserProfile(res.data.user);
+        }
+      } catch (e) {
+        console.error(e);
+      }
+    };
+    fetchDeptsAndPlants();
+    fetchProfile();
   }, []);
 
   const handleExport = async (format: "csv" | "excel") => {
@@ -30,6 +47,7 @@ const Reports = () => {
       params.append("format", format);
       if (filter.status) params.append("status", filter.status);
       if (filter.department_id) params.append("department_id", filter.department_id);
+      if (filter.plant_id) params.append("plant_id", filter.plant_id);
 
       const response = await api.get(`/api/reports/export?${params.toString()}`, {
         responseType: 'blob'
@@ -51,7 +69,14 @@ const Reports = () => {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold text-slate-800">Custom Reports</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-bold text-slate-800 flex items-center">
+          Custom Reports
+          <span className="text-blue-600 font-bold ml-3 text-lg bg-blue-50 px-3 py-1 rounded-full border border-blue-100">
+            • {userProfile?.plant ? userProfile.plant.plant_name : "Global"}
+          </span>
+        </h1>
+      </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <Card>
@@ -70,6 +95,19 @@ const Reports = () => {
                 <option value="PENDING">Pending</option>
                 <option value="APPROVED">Approved</option>
                 <option value="REJECTED">Rejected</option>
+              </select>
+            </div>
+            <div className="space-y-1">
+              <label className="text-sm font-medium leading-none">Location (Plant)</label>
+              <select 
+                className="flex h-10 w-full rounded-md border border-slate-300 bg-transparent px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-secondary focus:border-transparent"
+                value={filter.plant_id}
+                onChange={(e) => setFilter({ ...filter, plant_id: e.target.value })}
+              >
+                <option value="">All Locations</option>
+                {plants.map(p => (
+                  <option key={p.id} value={p.id}>{p.plant_name}</option>
+                ))}
               </select>
             </div>
             <div className="space-y-1">

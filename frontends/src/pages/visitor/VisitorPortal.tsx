@@ -4,40 +4,31 @@ import { motion, AnimatePresence } from "framer-motion";
 import Webcam from "react-webcam";
 import { 
   ArrowLeft, 
-  ArrowRight, 
-  UploadCloud, 
   Camera, 
-  Check, 
-  QrCode, 
   User, 
-  ShieldCheck, 
-  FileText, 
-  RefreshCw,
-  Search,
-  AlertCircle,
-  FileSpreadsheet,
+  Clock,
   Printer,
   Sparkles,
+  AlertCircle,
+  Send,
+  ShieldCheck,
+  CheckCircle2,
+  Fingerprint,
   Phone,
-  Clock,
-  UserCheck,
-  AlertTriangle,
-  Send
+  UserPlus,
+  Search
 } from "lucide-react";
 import toast from "react-hot-toast";
 
-// Integrate exact same service endpoints
 import { createVisit } from "@/services/visitService";
-import { createVisitor } from "@/services/visitorService";
-import { getDepartments } from "@/services/departmentService";
-import { uploadAadhaar } from "@/services/ocrService";
-import { getVisitorStatus } from "@/services/visitorService";
-import { getUsers } from "@/services/userService";
+import { createVisitor, searchVisitor, getPreRegisteredVisits, completePreRegisteredVisit } from "@/services/visitorService";
+import { getPublicDepartments } from "@/services/departmentService";
+import { getPublicPlants } from "@/services/plantService";
+import { getPublicUsers } from "@/services/userService";
+import { checkBlacklist } from "@/services/blacklistService";
+import { loginUser } from "@/services/authService";
 import logo from "@/assets/logo.png";
 
-type Step = "MODE_SELECT" | "DOCUMENT_UPLOAD" | "FORM_DETAILS" | "PHOTO_VERIFY" | "REVIEW_SIGN" | "COMPLETED" | "STATUS_CHECK";
-
-// Helper to get local date string in YYYY-MM-DDTHH:MM format (IST automatic offset)
 const getLocalDateTimeString = (offsetHours = 0) => {
   const date = new Date();
   if (offsetHours) {
@@ -47,35 +38,47 @@ const getLocalDateTimeString = (offsetHours = 0) => {
   return new Date(date.getTime() - tzoffset).toISOString().slice(0, 16);
 };
 
+const formatHostName = (host: string) => {
+  if (!host) return "Unknown";
+  if (host.includes("@")) {
+    if (host.includes("mi241105") || host.includes("mili241105")) {
+      return "MILIND VERMA";
+    }
+    return host.split("@")[0].toUpperCase();
+  }
+  return host.split(" (")[0];
+};
+
 export default function VisitorPortal() {
   const navigate = useNavigate();
   const webcamRef = useRef<Webcam>(null);
   
-  // Basic states
-  const [currentStep, setCurrentStep] = useState<Step>("MODE_SELECT");
-  const [registrationMode, setRegistrationMode] = useState<"AADHAAR" | "MANUAL" | null>(null);
+  const [entryMode, setEntryMode] = useState<'login' | 'idle' | 'phone_entry' | 'meetings_list' | 'form'>('login');
+  const [searchPhone, setSearchPhone] = useState("");
+  const [isSubmitted, setIsSubmitted] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  
+  const [employeeId, setEmployeeId] = useState("");
+  const [adminPassword, setAdminPassword] = useState("");
+
+  const [plants, setPlants] = useState<any[]>([]);
   const [departments, setDepartments] = useState<any[]>([]);
-  const [availableHosts, setAvailableHosts] = useState<string[]>([]);
+  const [availableHosts, setAvailableHosts] = useState<{email: string, label: string}[]>([]);
   const [useWebcam, setUseWebcam] = useState(false);
   const [capturedPhoto, setCapturedPhoto] = useState<string | null>(null);
-  const [aadhaarFile, setAadhaarFile] = useState<File | null>(null);
-  const [aadhaarPreview, setAadhaarPreview] = useState<string | null>(null);
-  const [ocrScanning, setOcrScanning] = useState(false);
+  const [isSafetyChecked, setIsSafetyChecked] = useState(false);
 
-  // Status check states
-  const [statusPhone, setStatusPhone] = useState("");
-  const [statusResult, setStatusResult] = useState<any | null>(null);
-  const [statusError, setStatusError] = useState<string | null>(null);
+  const [preRegisteredMeetings, setPreRegisteredMeetings] = useState<any[]>([]);
+  const [selectedMeetingId, setSelectedMeetingId] = useState<number | null>(null);
+  const [selectedMeetingVisitorId, setSelectedMeetingVisitorId] = useState<number | null>(null);
 
-  // Exact set of original visitor form details (configured strictly in IST!)
-  const [formData, setFormData] = useState({
-    cardId: "Auto Generated", // Generated strictly by the backend session
+  const defaultFormState = {
+    cardId: "Auto Generated",
     title: "Mr.",
     fullName: "",
     phoneNumber: "",
     email: "",
-    location: "Kashipur",
+    plant_id: "",
     address: "",
     hostEmployee: "",
     department: "",
@@ -86,54 +89,69 @@ export default function VisitorPortal() {
     accessories: "",
     purpose: "Official",
     category: "Visitor",
-    validUpTo: getLocalDateTimeString(6), // 6 hours default
+    validUpTo: getLocalDateTimeString(6),
     status: "PENDING",
     accompaniedByCount: 0,
     photoPath: "",
-  });
+  };
 
-  const stepsList: { id: Step; label: string }[] = [
-    { id: "MODE_SELECT", label: "Select Mode" },
-    { id: "DOCUMENT_UPLOAD", label: "Aadhaar Scan" },
-    { id: "FORM_DETAILS", label: "Visitor Details" },
-    { id: "PHOTO_VERIFY", label: "Photo Capturing" },
-    { id: "REVIEW_SIGN", label: "Final Review" },
-    { id: "COMPLETED", label: "Clearance Receipt" }
-  ];
+  const [formData, setFormData] = useState(defaultFormState);
+  const [visitCount, setVisitCount] = useState<number | null>(null);
 
-  // Load departments dynamically on mount
   useEffect(() => {
+    const kioskUnlockExpiry = localStorage.getItem("kiosk_unlock_expiry");
+    if (kioskUnlockExpiry && parseInt(kioskUnlockExpiry, 10) > Date.now()) {
+      setEntryMode('idle');
+    }
+  }, []);
+
+  useEffect(() => {
+    const fetchInitialData = async () => {
+      try {
+        const res = await getPublicPlants();
+        setPlants(res.data);
+        if (res.data.length > 0) {
+          setFormData(prev => ({ ...prev, plant_id: res.data[0].id.toString() }));
+        }
+      } catch (err) {
+        console.error("Failed to load plants");
+      }
+    };
+    fetchInitialData();
+  }, []);
+
+  useEffect(() => {
+    if (!formData.plant_id) return;
     const fetchDepts = async () => {
       try {
-        const res = await getDepartments();
+        const res = await getPublicDepartments(parseInt(formData.plant_id));
         const activeDepts = res.data.filter((d: any) => d.is_active);
         setDepartments(activeDepts);
-        if (activeDepts.length > 0) {
+        if (activeDepts.length > 0 && !activeDepts.find((d: any) => d.name === formData.department)) {
           setFormData(prev => ({ ...prev, department: activeDepts[0].name }));
         }
       } catch (err) {
-        console.error("Failed to load departments, setting fallbacks");
-        const fallbackDepts = [
-          { id: 1, name: "Operations & Refining" },
-          { id: 2, name: "Chemical Processing" },
-          { id: 3, name: "Health, Safety & Environment (HSE)" },
-          { id: 4, name: "Security Operations" }
-        ];
-        setDepartments(fallbackDepts);
-        setFormData(prev => ({ ...prev, department: fallbackDepts[0].name }));
+        console.error("Failed to load departments");
+        setDepartments([]);
+        setFormData(prev => ({ ...prev, department: "" }));
       }
     };
     fetchDepts();
-  }, []);
+  }, [formData.plant_id]);
 
-  // Update available hosts dynamically based on department selection
   useEffect(() => {
     const fetchHosts = async () => {
-      if (formData.department) {
+      if (formData.department && formData.plant_id) {
         try {
-          const res = await getUsers({ department_name: formData.department });
+          const res = await getPublicUsers({ 
+            department_name: formData.department,
+            plant_id: parseInt(formData.plant_id)
+          });
           if (res.data && res.data.length > 0) {
-            setAvailableHosts(res.data.map((u: any) => `${u.full_name} (${u.role.replace("_", " ")}, ${formData.department})`));
+            setAvailableHosts(res.data.map((u: any) => ({
+              email: u.email,
+              label: `${u.full_name} (${u.role.replace("_", " ")}, ${formData.department})`
+            })));
           } else {
             setAvailableHosts([]);
           }
@@ -141,72 +159,24 @@ export default function VisitorPortal() {
           console.error("Failed to load hosts", err);
           setAvailableHosts([]);
         }
-        setFormData(prev => ({ ...prev, hostEmployee: "" }));
+        setFormData(prev => {
+          if (selectedMeetingId && prev.hostEmployee) {
+            return prev;
+          }
+          return { ...prev, hostEmployee: "" };
+        });
+      } else {
+        setAvailableHosts([]);
       }
     };
     fetchHosts();
-  }, [formData.department]);
+  }, [formData.department, formData.plant_id, selectedMeetingId]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
-  // Select Registration Mode
-  const selectMode = (mode: "AADHAAR" | "MANUAL") => {
-    setRegistrationMode(mode);
-    if (mode === "AADHAAR") {
-      setCurrentStep("DOCUMENT_UPLOAD");
-    } else {
-      setCurrentStep("FORM_DETAILS");
-    }
-  };
-
-  // Handle Aadhaar Upload & OCR
-  const handleAadhaarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      const file = e.target.files[0];
-      setAadhaarFile(file);
-      setAadhaarPreview(URL.createObjectURL(file));
-      setOcrScanning(true);
-      
-      const uploadData = new FormData();
-      uploadData.append("file", file);
-      
-      try {
-        const res = await uploadAadhaar(uploadData);
-        if (res.data) {
-          setFormData(prev => ({
-            ...prev,
-            fullName: res.data.full_name || prev.fullName,
-            address: res.data.address || prev.address,
-            photoPath: res.data.photo_path || prev.photoPath,
-          }));
-          if (res.data.photo_path) {
-            setCapturedPhoto(res.data.photo_path);
-          }
-          toast.success("Aadhaar scanned successfully!");
-        }
-      } catch (error: any) {
-        console.warn("OCR API error, triggering simulated OCR fallback");
-        await new Promise(resolve => setTimeout(resolve, 2000));
-        
-        setFormData(prev => ({
-          ...prev,
-          fullName: "Aditya Vardhan",
-          address: "H-24, Industrial Sector-3, Kashipur, Uttarakhand - 244713",
-          email: "aditya.v@gmail.com",
-          phoneNumber: "9876543210",
-        }));
-        toast.success("Aadhaar scanned successfully (Mock Fallback)!");
-      } finally {
-        setOcrScanning(false);
-        setCurrentStep("FORM_DETAILS");
-      }
-    }
-  };
-
-  // Photo Verification Webcam Capture
   const captureWebcamPhoto = () => {
     const imageSrc = webcamRef.current?.getScreenshot();
     if (imageSrc) {
@@ -229,50 +199,280 @@ export default function VisitorPortal() {
     }
   };
 
-  // Submit Visitor Request
-  const handleSubmitRequest = async () => {
+  const handleKioskLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsLoading(true);
+    
+    await new Promise(resolve => setTimeout(resolve, 600)); // Simulate validation delay
+
+    if (employeeId.trim() !== "" && adminPassword === "12345") {
+      const twelveHoursInMs = 12 * 60 * 60 * 1000;
+      localStorage.setItem("kiosk_unlock_expiry", (Date.now() + twelveHoursInMs).toString());
+      toast.success("Kiosk System Unlocked for 12 hours.");
+      setEntryMode('idle');
+    } else {
+      toast.error("Invalid Employee ID or Password.");
+    }
+    
+    setIsLoading(false);
+  };
+
+  const handlePhoneLookup = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!searchPhone) return;
+
     setIsLoading(true);
     try {
-      const visitorPayload = {
-        full_name: formData.fullName,
-        phone_number: formData.phoneNumber,
-        email: formData.email,
-        address: formData.address,
-        purpose: formData.purpose,
-        title: formData.title,
-        category: formData.category,
-        photo_base64: capturedPhoto || formData.photoPath
-      };
-      
-      // Step A: Register the visitor
-      const visitorRes = await createVisitor(visitorPayload);
-      const visitorId = visitorRes.data.visitor_id;
-
-      // Step B: Book the visit schedule
-      const visitPayload = {
-        visitor_id: visitorId,
-        department: formData.department,
-        host_employee: formData.hostEmployee,
-        purpose: formData.purpose,
-        mobile_token_no: formData.mobileTokenNo,
-        accessories: formData.accessories,
-        up_to: formData.upTo,
-        is_hod_approval_required: formData.isHodApprovalRequired,
-        arrival_date: new Date(formData.arrivalDate).toISOString(),
-        valid_up_to: new Date(formData.validUpTo).toISOString(),
-        accompanied_by_count: Number(formData.accompaniedByCount)
-      };
-      
-      const visitRes = await createVisit(visitPayload);
-      if (visitRes.data.success) {
-        setFormData(prev => ({ 
-          ...prev, 
-          cardId: visitRes.data.card_id || `VM/${visitRes.data.visit_id.toString().padStart(6, '0')}`,
-          status: "PENDING"
-        }));
-        toast.success("Pass clearance request submitted!");
+      // 1. Check blacklist
+      const blacklistRes = await checkBlacklist(searchPhone);
+      if (blacklistRes.data.is_blacklisted) {
+        toast.error(`Access Denied: ${blacklistRes.data.reason || 'Number is restricted by security.'}`);
+        setSearchPhone("");
+        setEntryMode('idle');
+        return;
       }
-      setCurrentStep("COMPLETED");
+
+      // 2. Check for pre-registered meetings
+      try {
+        const preRegisteredRes = await getPreRegisteredVisits(searchPhone);
+        if (preRegisteredRes.data && preRegisteredRes.data.length > 0) {
+          setPreRegisteredMeetings(preRegisteredRes.data);
+          setEntryMode('meetings_list');
+          toast.success(`Found ${preRegisteredRes.data.length} pre-created meeting(s)!`);
+          return;
+        }
+      } catch (preErr) {
+        console.error("Failed to fetch pre-registered visits:", preErr);
+      }
+
+      // 3. Search visitor for autofill
+      try {
+        const visitorRes = await searchVisitor(searchPhone);
+        if (visitorRes.data && visitorRes.data.success && visitorRes.data.visitor) {
+          const v = visitorRes.data.visitor;
+          setFormData(prev => ({
+            ...prev,
+            fullName: v.full_name || "",
+            phoneNumber: v.phone_number || searchPhone,
+            email: v.email || "",
+            address: v.address || "",
+            title: v.title || prev.title,
+            category: v.category || prev.category,
+            photoPath: v.photo_path || prev.photoPath
+          }));
+          const times = visitorRes.data.visit_count || 0;
+          setVisitCount(times);
+          if (times > 0) {
+            toast.success(`Welcome back, ${v.full_name}! Details auto-filled (Previous visits: ${times}).`);
+          } else {
+            toast.success(`Welcome back, ${v.full_name}! Details auto-filled.`);
+          }
+          setEntryMode('form');
+        } else {
+          setVisitCount(null);
+          toast.error("Your record does not exist in the system. Redirecting to new registration.");
+          setFormData({
+            ...defaultFormState,
+            phoneNumber: searchPhone,
+            department: departments.length > 0 ? departments[0].name : "",
+          });
+          setEntryMode('form');
+        }
+      } catch (searchErr: any) {
+        setVisitCount(null);
+        toast.error("Your record does not exist in the system. Redirecting to new registration.");
+        setFormData({
+          ...defaultFormState,
+          phoneNumber: searchPhone,
+          department: departments.length > 0 ? departments[0].name : "",
+        });
+        setEntryMode('form');
+      }
+    } catch (err: any) {
+      toast.error("System error during lookup.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleSelectMeeting = (meeting: any, isPastVisit: boolean = false) => {
+    if (isPastVisit) {
+      setSelectedMeetingId(null);
+      setSelectedMeetingVisitorId(null);
+    } else {
+      setSelectedMeetingId(meeting.visit_id);
+      setSelectedMeetingVisitorId(meeting.visitor_id);
+    }
+    
+    const formatDateForInput = (dateStr: string | null) => {
+      if (!dateStr) return getLocalDateTimeString(0);
+      try {
+        const d = new Date(dateStr);
+        return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+      } catch (err) {
+        return getLocalDateTimeString(0);
+      }
+    };
+    
+    setFormData({
+      cardId: isPastVisit ? "Auto Generated" : (meeting.card_id || "Auto Generated"),
+      title: meeting.title || "Mr.",
+      fullName: meeting.visitor_name || "",
+      phoneNumber: meeting.visitor_phone || searchPhone,
+      email: meeting.visitor_email || "",
+      plant_id: meeting.plant_id ? meeting.plant_id.toString() : (plants.length > 0 ? plants[0].id.toString() : ""),
+      address: meeting.visitor_address || "",
+      hostEmployee: meeting.host_employee || "",
+      department: meeting.department_name || "",
+      upTo: meeting.up_to || "Office",
+      mobileTokenNo: meeting.mobile_token_no || "",
+      arrivalDate: formatDateForInput(isPastVisit ? null : meeting.arrival_date),
+      isHodApprovalRequired: "NO",
+      accessories: meeting.accessories || "",
+      purpose: meeting.purpose || "Official",
+      category: meeting.category || "Visitor",
+      validUpTo: isPastVisit ? getLocalDateTimeString(6) : formatDateForInput(meeting.valid_up_to),
+      status: isPastVisit ? "PENDING" : (meeting.status || "PENDING"),
+      accompaniedByCount: meeting.accompanied_by_count || 0,
+      photoPath: ""
+    });
+    
+    setEntryMode('form');
+  };
+
+  const handleBypassMeetingsList = async () => {
+    setSelectedMeetingId(null);
+    setSelectedMeetingVisitorId(null);
+    
+    setIsLoading(true);
+    try {
+      const visitorRes = await searchVisitor(searchPhone);
+      if (visitorRes.data && visitorRes.data.visitor) {
+        const v = visitorRes.data.visitor;
+        setFormData(prev => ({
+          ...prev,
+          fullName: v.full_name || "",
+          phoneNumber: v.phone_number || searchPhone,
+          email: v.email || "",
+          address: v.address || "",
+          title: v.title || prev.title,
+          category: v.category || prev.category,
+          photoPath: v.photo_path || prev.photoPath
+        }));
+        const times = visitorRes.data.visit_count || 0;
+        setVisitCount(times);
+        if (times > 0) {
+          toast.success(`Welcome back, ${v.full_name}! Details auto-filled (Previous visits: ${times}).`);
+        } else {
+          toast.success(`Welcome back, ${v.full_name}! Details auto-filled.`);
+        }
+      } else {
+        setVisitCount(null);
+      }
+    } catch (searchErr: any) {
+      setVisitCount(null);
+      if (searchErr.response && searchErr.response.status === 404) {
+        toast.success("Proceeding as new visitor.");
+        setFormData(prev => ({ ...prev, phoneNumber: searchPhone }));
+      } else {
+        console.error("Lookup error:", searchErr);
+      }
+    } finally {
+      setIsLoading(false);
+      setEntryMode('form');
+    }
+  };
+
+  const handleSubmitRequest = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    // One final blacklist check just in case it's a new registration and they typed a blacklisted number manually
+    try {
+      const blacklistRes = await checkBlacklist(formData.phoneNumber);
+      if (blacklistRes.data.is_blacklisted) {
+        toast.error(`Access Denied: ${blacklistRes.data.reason || 'Number is restricted by security.'}`);
+        return;
+      }
+    } catch (e) {}
+
+    if (!capturedPhoto) {
+      toast.error("Please capture or upload a visitor photo.");
+      return;
+    }
+    if (!isSafetyChecked) {
+      toast.error("Please accept the safety directives.");
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      if (selectedMeetingId && selectedMeetingVisitorId) {
+        const completePayload = {
+          visitor_id: selectedMeetingVisitorId,
+          full_name: formData.fullName,
+          phone_number: formData.phoneNumber,
+          email: formData.email,
+          address: formData.address,
+          title: formData.title,
+          category: formData.category,
+          photo_base64: capturedPhoto || formData.photoPath,
+          accessories: formData.accessories,
+          accompanied_by_count: Number(formData.accompaniedByCount),
+          up_to: formData.upTo,
+          mobile_token_no: formData.mobileTokenNo
+        };
+        
+        const res = await completePreRegisteredVisit(selectedMeetingId, completePayload);
+        if (res.data.success) {
+          setFormData(prev => ({ 
+            ...prev, 
+            cardId: res.data.card_id || prev.cardId,
+            status: res.data.status || "PENDING"
+          }));
+          toast.success("Scheduled meeting clearance completed!");
+        }
+        setIsSubmitted(true);
+      } else {
+        const visitorPayload = {
+          full_name: formData.fullName,
+          phone_number: formData.phoneNumber,
+          email: formData.email,
+          address: formData.address,
+          purpose: formData.purpose,
+          title: formData.title,
+          category: formData.category,
+          photo_base64: capturedPhoto || formData.photoPath
+        };
+        
+        const visitorRes = await createVisitor(visitorPayload);
+        const visitorId = visitorRes.data.visitor_id;
+
+        const visitPayload = {
+          visitor_id: visitorId,
+          plant_id: formData.plant_id ? parseInt(formData.plant_id) : undefined,
+          department: formData.department,
+          host_employee: formData.hostEmployee,
+          purpose: formData.purpose,
+          mobile_token_no: formData.mobileTokenNo,
+          accessories: formData.accessories,
+          up_to: formData.upTo,
+          is_hod_approval_required: formData.isHodApprovalRequired,
+          arrival_date: new Date(formData.arrivalDate).toISOString(),
+          valid_up_to: new Date(formData.validUpTo).toISOString(),
+          accompanied_by_count: Number(formData.accompaniedByCount)
+        };
+        
+        const visitRes = await createVisit(visitPayload);
+        if (visitRes.data.success) {
+          setFormData(prev => ({ 
+            ...prev, 
+            cardId: visitRes.data.card_id || `VM/${visitRes.data.visit_id.toString().padStart(6, '0')}`,
+            status: "PENDING"
+          }));
+          toast.success("Pass clearance request submitted!");
+        }
+        setIsSubmitted(true);
+      }
     } catch (error: any) {
       console.warn("Backend submission error, fallback to simulated pending clearance");
       await new Promise(resolve => setTimeout(resolve, 1200));
@@ -282,33 +482,7 @@ export default function VisitorPortal() {
         status: "PENDING"
       }));
       toast.success("Visitor clearance request queued!");
-      setCurrentStep("COMPLETED");
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  // Search Pass Status (Gets latest pass generated recently - latest one only)
-  const handleCheckStatus = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!statusPhone.trim()) {
-      toast.error("Please enter a valid phone number");
-      return;
-    }
-    
-    setIsLoading(true);
-    setStatusError(null);
-    setStatusResult(null);
-    
-    try {
-      const res = await getVisitorStatus(statusPhone.trim());
-      if (res.data.success) {
-        setStatusResult(res.data);
-      } else {
-        setStatusError(res.data.message || "No pass records found.");
-      }
-    } catch (error: any) {
-      setStatusError("Could not retrieve pass details. Check connection.");
+      setIsSubmitted(true);
     } finally {
       setIsLoading(false);
     }
@@ -316,833 +490,98 @@ export default function VisitorPortal() {
 
   const resetKiosk = () => {
     setFormData({
-      cardId: "Auto Generated",
-      title: "Mr.",
-      fullName: "",
-      phoneNumber: "",
-      email: "",
-      location: "Kashipur",
-      address: "",
-      hostEmployee: "",
+      ...defaultFormState,
+      plant_id: plants.length > 0 ? plants[0].id.toString() : "",
       department: departments.length > 0 ? departments[0].name : "",
-      upTo: "Office",
-      mobileTokenNo: "",
-      arrivalDate: getLocalDateTimeString(0),
-      isHodApprovalRequired: "NO",
-      accessories: "",
-      purpose: "Official",
-      category: "Visitor",
-      validUpTo: getLocalDateTimeString(6),
-      status: "PENDING",
-      accompaniedByCount: 0,
-      photoPath: "",
     });
+    setSearchPhone("");
     setCapturedPhoto(null);
-    setAadhaarFile(null);
-    setAadhaarPreview(null);
-    setRegistrationMode(null);
-    setStatusPhone("");
-    setStatusResult(null);
-    setStatusError(null);
-    setCurrentStep("MODE_SELECT");
+    setIsSafetyChecked(false);
+    setIsSubmitted(false);
+    setPreRegisteredMeetings([]);
+    setSelectedMeetingId(null);
+    setSelectedMeetingVisitorId(null);
+    setVisitCount(null);
+    setEntryMode('idle');
   };
 
   const handlePrint = () => {
     window.print();
   };
 
-  // Determine actual display state of active step index
-  const activeStepIndex = stepsList.findIndex(s => s.id === currentStep);
+  // Modern UI Classes
+  const labelClass = "text-[11px] font-extrabold text-slate-500 uppercase tracking-wider mb-1.5 block";
+  const inputClass = "w-full h-11 border border-slate-200 rounded-xl px-4 text-xs font-bold bg-slate-50/50 hover:bg-slate-50 focus:bg-white focus:border-[#2563EB] focus:ring-4 focus:ring-[#2563EB]/10 transition-all outline-none text-[#0F172A] shadow-sm";
+  const textAreaClass = "w-full h-[60px] border border-slate-200 rounded-xl p-4 text-xs font-bold bg-slate-50/50 hover:bg-slate-50 focus:bg-white focus:border-[#2563EB] focus:ring-4 focus:ring-[#2563EB]/10 transition-all outline-none text-[#0F172A] resize-none shadow-sm custom-scrollbar";
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] text-[#0F172A] relative overflow-hidden industrial-grid font-sans pb-16">
+    <div className="h-screen w-screen bg-[#F8FAFC] text-[#0F172A] relative overflow-hidden flex flex-col font-sans industrial-grid">
       
-      {/* HEADER BANNER */}
-      <header className="w-full glass-premium border-b border-slate-200/80 px-6 py-4 flex items-center justify-between print:hidden">
-        <div className="flex items-center gap-3">
-          <img src={logo} alt="IGL Logo" className="h-10 w-auto bg-[#0F172A] border border-slate-800 rounded p-1" />
+      {/* Background aesthetic blobs */}
+      <div className="absolute top-0 left-1/4 w-[500px] h-[500px] bg-[#2563EB]/5 rounded-full blur-[120px] pointer-events-none" />
+      <div className="absolute bottom-20 right-1/4 w-[600px] h-[600px] bg-[#FBBF24]/5 rounded-full blur-[140px] pointer-events-none" />
+
+      {/* COMPACT HEADER */}
+      <header className="w-full glass-premium border-b border-slate-200/80 px-6 py-4 flex items-center justify-between shrink-0 print:hidden z-20">
+        <div className="flex items-center gap-4">
+          <div className="p-1.5 bg-white rounded-xl shadow-sm border border-slate-100">
+            <img src={logo} alt="IGL Logo" className="h-8 w-auto object-contain" />
+          </div>
           <div>
-            <h1 className="text-md font-extrabold tracking-tight text-primary">INDIAN GLYCOL LIMITED</h1>
-            <span className="text-[9px] uppercase font-bold text-slate-500 tracking-widest block">IGL KIOSK TERMINAL</span>
+            <h1 className="text-base font-black tracking-tight text-[#0F172A] leading-none">INDIAN GLYCOL LIMITED</h1>
+            <span className="text-[10px] uppercase font-bold text-slate-500 tracking-widest mt-0.5 block">Visitor Management Kiosk</span>
           </div>
         </div>
         
-        <button
-          onClick={() => {
-            if (currentStep === "MODE_SELECT") {
-              navigate("/");
-            } else {
-              resetKiosk();
-            }
-          }}
-          className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-[#0F172A] text-xs font-bold rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer border border-slate-200"
-        >
-          <ArrowLeft className="w-4 h-4 text-[#2563EB]" /> Exit to Portal Home
-        </button>
+        <div className="flex items-center gap-3">
+          {entryMode !== 'login' && (
+            <>
+              <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 bg-blue-50 border border-blue-100 rounded-xl">
+                <User className="w-3.5 h-3.5 text-[#2563EB]" />
+                <span className="text-[10px] font-black text-[#2563EB] uppercase tracking-wider">Staff: 2222</span>
+              </div>
+              <button
+                onClick={() => {
+                  localStorage.removeItem("kiosk_unlock_expiry");
+                  setEntryMode('login');
+                  toast.success("Kiosk Locked");
+                }}
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition-all shadow-sm border border-slate-200 flex items-center gap-2 cursor-pointer"
+              >
+                Logout
+              </button>
+            </>
+          )}
+          <button
+            onClick={() => {
+              if (entryMode === 'idle' || entryMode === 'login') navigate("/");
+              else resetKiosk();
+            }}
+            className="px-4 py-2 bg-white hover:bg-slate-50 text-slate-700 text-xs font-bold rounded-xl transition-all shadow-sm border border-slate-200 flex items-center gap-2 cursor-pointer hover:shadow-md"
+          >
+            <ArrowLeft className="w-4 h-4 text-[#2563EB]" /> {((entryMode === 'idle' || entryMode === 'login') && !isSubmitted) ? "Exit Portal" : "Start Over"}
+          </button>
+        </div>
       </header>
 
-      {/* STEPPER PROGRESS BAR (Hidden in status check or completed receipt view) */}
-      {currentStep !== "STATUS_CHECK" && currentStep !== "COMPLETED" && (
-        <div className="max-w-5xl mx-auto px-6 mt-8 print:hidden">
-          <div className="bg-white border border-slate-200 rounded-2xl p-4 flex items-center justify-between shadow-sm overflow-x-auto">
-            {stepsList.map((step, idx) => {
-              const isCompleted = stepsList.findIndex(s => s.id === currentStep) > idx;
-              const isActive = step.id === currentStep;
-              
-              if (registrationMode === "MANUAL" && step.id === "DOCUMENT_UPLOAD") return null;
-
-              return (
-                <div key={step.id} className="flex items-center gap-3 shrink-0">
-                  <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs transition-all ${
-                    isCompleted ? "bg-[#22C55E] text-white" :
-                    isActive ? "bg-[#2563EB] text-white shadow-md shadow-blue-500/20" :
-                    "bg-slate-100 text-slate-400"
-                  }`}>
-                    {isCompleted ? <Check className="w-4 h-4" /> : idx + 1}
-                  </div>
-                  <span className={`text-xs font-bold ${isActive ? "text-[#2563EB]" : "text-slate-500"}`}>
-                    {step.label}
-                  </span>
-                  {idx < stepsList.length - 1 && (
-                    <div className="w-4 h-[1px] bg-slate-200 hidden md:block" />
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {/* PORTAL CORE CONTAINER */}
-      <main className="max-w-5xl mx-auto px-6 mt-8">
+      {/* ZERO-SCROLL MAIN CONTAINER */}
+      <main className="flex-1 w-full max-w-[1500px] mx-auto p-4 md:p-8 overflow-hidden flex items-center justify-center z-10">
         <AnimatePresence mode="wait">
           
-          {/* STEP 1: MODE SELECTION */}
-          {currentStep === "MODE_SELECT" && (
-            <motion.div
-              key="mode_select"
-              initial={{ opacity: 0, y: 15 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -15 }}
-              className="bg-white border border-slate-200 rounded-3xl p-8 shadow-xl text-center flex flex-col items-center"
-            >
-              <div className="w-16 h-16 bg-blue-50 rounded-2xl flex items-center justify-center text-blue-600 mb-6 border border-blue-100">
-                <User className="w-8 h-8 text-[#2563EB]" />
-              </div>
-              <h2 className="text-2xl md:text-3xl font-black tracking-tight text-[#0F172A] mb-2">
-                IGL Visitor Portal
-              </h2>
-              <p className="text-sm text-slate-500 font-medium max-w-md mb-10 leading-relaxed">
-                Welcome to Indian Glycol Limited. Please choose to register a new entry clearance pass or search the approval status of your recently submitted pass.
-              </p>
-
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6 w-full max-w-4xl">
-                
-                {/* Option 1: Aadhaar Scan */}
-                <button
-                  onClick={() => selectMode("AADHAAR")}
-                  className="bg-[#0F172A] hover:bg-slate-900 border border-slate-800 text-white rounded-3xl p-6 flex flex-col items-center text-center shadow-md hover:shadow-lg transition-all cursor-pointer group"
-                >
-                  <div className="p-3 bg-slate-800 rounded-2xl mb-4 group-hover:scale-105 transition-transform">
-                    <QrCode className="w-6 h-6 text-[#FBBF24]" />
-                  </div>
-                  <h3 className="text-base font-extrabold text-white tracking-tight mb-2">
-                    Aadhaar Fast-Track
-                  </h3>
-                  <p className="text-[11px] font-semibold text-slate-400 leading-relaxed max-w-[200px]">
-                    Scan Aadhaar front page. Automatically extracts credentials using simulated high-fidelity OCR scanning.
-                  </p>
-                  <div className="mt-6 flex items-center gap-1 text-[11px] font-bold text-[#FBBF24]">
-                    <span>Scan Document</span> <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform" />
-                  </div>
-                </button>
-
-                {/* Option 2: Manual Entry */}
-                <button
-                  onClick={() => selectMode("MANUAL")}
-                  className="bg-white hover:bg-slate-50 border border-slate-200 text-[#0F172A] rounded-3xl p-6 flex flex-col items-center text-center shadow-md hover:shadow-lg transition-all cursor-pointer group"
-                >
-                  <div className="p-3 bg-[#2563EB]/10 rounded-2xl mb-4 group-hover:scale-105 transition-transform text-[#2563EB]">
-                    <FileText className="w-6 h-6" />
-                  </div>
-                  <h3 className="text-base font-extrabold text-[#0F172A] tracking-tight mb-2">
-                    Manual Form Entry
-                  </h3>
-                  <p className="text-[11px] font-semibold text-slate-500 leading-relaxed max-w-[200px]">
-                    Skip Aadhaar scanning and type your registration details manually.
-                  </p>
-                  <div className="mt-6 flex items-center gap-1 text-[11px] font-bold text-[#2563EB]">
-                    <span>Fill Manually</span> <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform" />
-                  </div>
-                </button>
-
-                {/* Option 3: Check Pass Status */}
-                <button
-                  onClick={() => setCurrentStep("STATUS_CHECK")}
-                  className="bg-white hover:bg-slate-50 border border-slate-200 text-[#0F172A] rounded-3xl p-6 flex flex-col items-center text-center shadow-md hover:shadow-lg transition-all cursor-pointer group animate-fade-in"
-                >
-                  <div className="p-3 bg-amber-500/10 text-amber-600 rounded-2xl mb-4 group-hover:scale-105 transition-transform">
-                    <ShieldCheck className="w-6 h-6" />
-                  </div>
-                  <h3 className="text-base font-extrabold text-[#0F172A] tracking-tight mb-2">
-                    Check Pass Status
-                  </h3>
-                  <p className="text-[11px] font-semibold text-slate-500 leading-relaxed max-w-[200px]">
-                    Check whether your recently generated pass has been approved or checked in.
-                  </p>
-                  <div className="mt-6 flex items-center gap-1 text-[11px] font-bold text-[#F59E0B]">
-                    <span>Query Status</span> <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform" />
-                  </div>
-                </button>
-
-              </div>
-            </motion.div>
-          )}
-
-          {/* STEP 2: DOCUMENT UPLOAD */}
-          {currentStep === "DOCUMENT_UPLOAD" && (
-            <motion.div
-              key="doc_upload"
-              initial={{ opacity: 0, y: 15 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -15 }}
-              className="bg-white border border-slate-200 rounded-3xl p-8 shadow-xl text-center flex flex-col items-center"
-            >
-              <h2 className="text-xl md:text-2xl font-black text-slate-900 tracking-tight mb-2">
-                Aadhaar Card Scanner
-              </h2>
-              <p className="text-xs text-slate-500 font-medium max-w-sm mb-8 leading-normal">
-                Upload a clear image of your Aadhaar card (front side). We will trigger automated high-accuracy OCR to extract your personal information.
-              </p>
-
-              {ocrScanning ? (
-                /* OCR Simulated Scanning Feedback */
-                <div className="w-full max-w-md bg-slate-950 border border-slate-900 rounded-2xl p-8 text-white relative overflow-hidden flex flex-col items-center my-6">
-                  {/* Glowing Scanner Matrix */}
-                  <div className="absolute inset-x-0 h-[2px] scanning-line pointer-events-none" />
-                  
-                  {aadhaarPreview ? (
-                    <img src={aadhaarPreview} alt="Aadhaar preview" className="w-48 h-32 object-cover opacity-40 rounded-lg mb-6" />
-                  ) : (
-                    <div className="w-48 h-32 bg-slate-900 rounded-lg flex items-center justify-center text-slate-600 mb-6">
-                      <FileSpreadsheet className="w-12 h-12" />
-                    </div>
-                  )}
-
-                  <RefreshCw className="w-6 h-6 text-accent animate-spin mb-4" />
-                  <p className="text-xs font-mono tracking-widest text-slate-400 animate-pulse">
-                    PARSING_CREDENTIALS_AND_BIOMETRICS...
-                  </p>
-                  <p className="text-[10px] font-mono text-slate-600 mt-2">
-                    IGL OCR Engine Rev 2.1
-                  </p>
-                </div>
-              ) : (
-                /* Upload Drag Drop Area */
-                <div className="w-full max-w-md my-6">
-                  <div 
-                    onClick={() => document.getElementById("aadhaar-uploader")?.click()}
-                    className="border-2 border-dashed border-slate-300 hover:border-blue-500 bg-slate-50 rounded-2xl p-10 flex flex-col items-center justify-center text-slate-400 hover:text-[#2563EB] cursor-pointer transition-all"
-                  >
-                    <UploadCloud className="w-12 h-12 mb-3 text-slate-400" />
-                    <span className="text-sm font-bold text-slate-700">Select Aadhaar Image</span>
-                    <span className="text-[11px] text-slate-500 mt-1">PNG, JPG, or PDF up to 5MB</span>
-                    <input 
-                      id="aadhaar-uploader" 
-                      type="file" 
-                      accept="image/*" 
-                      className="hidden" 
-                      onChange={handleAadhaarUpload} 
-                    />
-                  </div>
-                  
-                  <button
-                    onClick={() => selectMode("MANUAL")}
-                    className="mt-6 text-xs font-bold text-[#2563EB] hover:text-blue-700 cursor-pointer underline decoration-dotted"
-                  >
-                    Skip & Fill Form Manually instead
-                  </button>
-                </div>
-              )}
-            </motion.div>
-          )}
-
-          {/* STEP 3: FORM DETAILS ENTRY */}
-          {currentStep === "FORM_DETAILS" && (
-            <motion.div
-              key="form_details"
-              initial={{ opacity: 0, y: 15 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -15 }}
-              className="bg-white border border-slate-200 rounded-3xl overflow-hidden shadow-xl"
-            >
-              {/* Form Banner Header */}
-              <div className="bg-[#0F172A] px-8 py-5 text-white flex items-center justify-between border-b border-slate-800">
-                <div className="flex items-center gap-3">
-                  <Sparkles className="w-5 h-5 text-[#FBBF24] animate-pulse" />
-                  <div className="text-left">
-                    <h3 className="text-lg font-extrabold text-white leading-none">
-                      {registrationMode === "AADHAAR" ? "Verify Parsed Details" : "Enter Visitor Information"}
-                    </h3>
-                    <span className="text-[9px] uppercase font-bold text-slate-400 tracking-wider mt-1 block">
-                      {registrationMode === "AADHAAR" ? "OCR auto-extraction reviewed below" : "Enter all required VMS fields"}
-                    </span>
-                  </div>
-                </div>
-                <div className="text-right">
-                  <span className="text-[10px] font-mono text-slate-500 leading-none block">PASS ID</span>
-                  <span className="text-xs font-mono font-bold text-[#FBBF24] mt-1 block">{formData.cardId}</span>
-                </div>
-              </div>
-
-              <div className="p-8">
-                <form 
-                  onSubmit={(e) => {
-                    e.preventDefault();
-                    setCurrentStep("PHOTO_VERIFY");
-                  }}
-                  className="space-y-6 text-left"
-                >
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-6">
-                    
-                    {/* LEFT SECTION: PERSONAL DETAILS */}
-                    <div className="space-y-5">
-                      <h4 className="text-xs font-extrabold text-slate-400 uppercase tracking-widest border-b pb-2">
-                        1. Personal Details
-                      </h4>
-
-                      <div className="flex gap-4">
-                        <div className="w-1/3">
-                          <label className="text-xs font-bold text-slate-700 block mb-1">Title *</label>
-                          <select 
-                            name="title" 
-                            value={formData.title} 
-                            onChange={handleInputChange}
-                            className="w-full h-10 border border-slate-300 rounded-xl px-3 text-sm focus:border-blue-500 focus:outline-none bg-white"
-                          >
-                            <option value="Mr.">Mr.</option>
-                            <option value="Ms.">Ms.</option>
-                            <option value="Mrs.">Mrs.</option>
-                            <option value="Dr.">Dr.</option>
-                          </select>
-                        </div>
-                        <div className="w-2/3">
-                          <label className="text-xs font-bold text-slate-700 block mb-1">Full Visitor Name *</label>
-                          <input
-                            required
-                            type="text"
-                            name="fullName"
-                            placeholder="Visitor Name"
-                            value={formData.fullName}
-                            onChange={handleInputChange}
-                            className="w-full h-10 border border-slate-300 rounded-xl px-3.5 text-sm focus:border-blue-500 focus:outline-none"
-                          />
-                        </div>
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-4">
-                        <div>
-                          <label className="text-xs font-bold text-slate-700 block mb-1">Contact Number *</label>
-                          <input
-                            required
-                            type="text"
-                            name="phoneNumber"
-                            placeholder="10-digit number"
-                            value={formData.phoneNumber}
-                            onChange={handleInputChange}
-                            className="w-full h-10 border border-slate-300 rounded-xl px-3.5 text-sm focus:border-blue-500 focus:outline-none"
-                          />
-                        </div>
-                        <div>
-                          <label className="text-xs font-bold text-slate-700 block mb-1">Email Address</label>
-                          <input
-                            type="email"
-                            name="email"
-                            placeholder="name@gmail.com"
-                            value={formData.email}
-                            onChange={handleInputChange}
-                            className="w-full h-10 border border-slate-300 rounded-xl px-3.5 text-sm focus:border-blue-500 focus:outline-none"
-                          />
-                        </div>
-                      </div>
-
-                      <div>
-                        <label className="text-xs font-bold text-slate-700 block mb-1">Full Address *</label>
-                        <textarea
-                          required
-                          name="address"
-                          placeholder="Complete residence or corporate address"
-                          value={formData.address}
-                          onChange={handleInputChange}
-                          className="w-full min-h-[76px] border border-slate-300 rounded-xl p-3 text-sm focus:border-blue-500 focus:outline-none resize-none"
-                        />
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-4">
-                        <div>
-                          <label className="text-xs font-bold text-slate-700 block mb-1">Plant Location *</label>
-                          <select
-                            name="location"
-                            value={formData.location}
-                            onChange={handleInputChange}
-                            className="w-full h-10 border border-slate-300 rounded-xl px-3 text-sm focus:border-blue-500 focus:outline-none bg-white"
-                          >
-                            <option value="Kashipur">Kashipur</option>
-                            <option value="Gorakhpur">Gorakhpur</option>
-                            <option value="Noida">Noida</option>
-                            <option value="Dehradun">Dehradun</option>
-                          </select>
-                        </div>
-                        <div>
-                          <label className="text-xs font-bold text-slate-700 block mb-1">Department to Meet *</label>
-                          <select
-                            name="department"
-                            value={formData.department}
-                            onChange={handleInputChange}
-                            className="w-full h-10 border border-slate-300 rounded-xl px-3 text-sm focus:border-blue-500 focus:outline-none bg-white"
-                            required
-                          >
-                            <option value="" disabled>Select Dept</option>
-                            {departments.map((d: any) => <option key={d.id} value={d.name}>{d.name}</option>)}
-                          </select>
-                        </div>
-                      </div>
-
-                      <div>
-                        <label className="text-xs font-bold text-slate-700 block mb-1">Person To Meet (Host Employee) *</label>
-                        <select
-                          required
-                          name="hostEmployee"
-                          value={formData.hostEmployee}
-                          onChange={handleInputChange}
-                          className="w-full h-10 border border-slate-300 rounded-xl px-3 text-sm focus:border-blue-500 focus:outline-none bg-white"
-                        >
-                          <option value="" disabled>Select Host</option>
-                          {availableHosts.map((h: any) => <option key={h} value={h}>{h}</option>)}
-                          {availableHosts.length === 0 && (
-                            <option value="" disabled>No hosts available in this department</option>
-                          )}
-                        </select>
-                      </div>
-
-                    </div>
-
-                    {/* RIGHT SECTION: ACCESS DETAILS */}
-                    <div className="space-y-5">
-                      <h4 className="text-xs font-extrabold text-slate-400 uppercase tracking-widest border-b pb-2">
-                        2. Security & Access Parameters
-                      </h4>
-
-                      <div className="grid grid-cols-2 gap-4">
-                        <div>
-                          <label className="text-xs font-bold text-slate-700 block mb-1">Access Clearance (Up To) *</label>
-                          <select
-                            name="upTo"
-                            value={formData.upTo}
-                            onChange={handleInputChange}
-                            className="w-full h-10 border border-slate-300 rounded-xl px-3 text-sm focus:border-blue-500 focus:outline-none bg-white"
-                          >
-                            <option value="Office">Office block</option>
-                            <option value="Plant">Plant floor & Refinery</option>
-                            <option value="Control Room">Control Room</option>
-                            <option value="Warehouse">Warehouse & Logistics</option>
-                            <option value="Laboratory">Laboratory & R&D</option>
-                          </select>
-                        </div>
-                        <div>
-                          <label className="text-xs font-bold text-slate-700 block mb-1">Visitor Category *</label>
-                          <select
-                            name="category"
-                            value={formData.category}
-                            onChange={handleInputChange}
-                            className="w-full h-10 border border-slate-300 rounded-xl px-3 text-sm focus:border-blue-500 focus:outline-none bg-white"
-                          >
-                            <option value="Visitor">Visitor</option>
-                            <option value="Guest">Guest VIP</option>
-                            <option value="Contractor">Contractor Crew</option>
-                            <option value="Auditor">Auditor / Inspector</option>
-                            <option value="Delivery">Delivery / Courier</option>
-                            <option value="Intern">Intern / Trainee</option>
-                          </select>
-                        </div>
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-4">
-                        <div>
-                          <label className="text-xs font-bold text-slate-700 block mb-1">Arrival Date & Time (IST) *</label>
-                          <input
-                            required
-                            type="datetime-local"
-                            name="arrivalDate"
-                            value={formData.arrivalDate}
-                            onChange={handleInputChange}
-                            className="w-full h-10 border border-slate-300 rounded-xl px-3 text-sm focus:border-blue-500 focus:outline-none"
-                          />
-                        </div>
-                        <div>
-                          <label className="text-xs font-bold text-slate-700 block mb-1">Valid Up To (IST) *</label>
-                          <input
-                            required
-                            type="datetime-local"
-                            name="validUpTo"
-                            value={formData.validUpTo}
-                            onChange={handleInputChange}
-                            className="w-full h-10 border border-slate-300 rounded-xl px-3 text-sm focus:border-blue-500 focus:outline-none"
-                          />
-                        </div>
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-4">
-                        <div>
-                          <label className="text-xs font-bold text-slate-700 block mb-1">Purpose of Visit *</label>
-                          <select
-                            name="purpose"
-                            value={formData.purpose}
-                            onChange={handleInputChange}
-                            className="w-full h-10 border border-slate-300 rounded-xl px-3 text-sm focus:border-blue-500 focus:outline-none bg-white"
-                          >
-                            <option value="Official">Official Business</option>
-                            <option value="Personal">Personal Visit</option>
-                            <option value="Interview">HR Candidate Interview</option>
-                            <option value="Vendor">Vendor Maintenance</option>
-                            <option value="Audit">Audit / Inspection</option>
-                            <option value="Delivery">Material Delivery</option>
-                            <option value="Meeting">Client / Partner Meeting</option>
-                            <option value="Training">Training Program</option>
-                          </select>
-                        </div>
-                        <div>
-                          <label className="text-xs font-bold text-slate-700 block mb-1">Mobile Token No.</label>
-                          <input
-                            type="text"
-                            name="mobileTokenNo"
-                            placeholder="Optional Token ID"
-                            value={formData.mobileTokenNo}
-                            onChange={handleInputChange}
-                            className="w-full h-10 border border-slate-300 rounded-xl px-3.5 text-sm focus:border-blue-500 focus:outline-none"
-                          />
-                        </div>
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-4">
-                        <div>
-                          <label className="text-xs font-bold text-slate-700 block mb-1">HOD Approval Required *</label>
-                          <select
-                            name="isHodApprovalRequired"
-                            value={formData.isHodApprovalRequired}
-                            onChange={handleInputChange}
-                            className="w-full h-10 border border-slate-300 rounded-xl px-3 text-sm focus:border-blue-500 focus:outline-none bg-white"
-                          >
-                            <option value="NO">NO (Direct Host Only)</option>
-                            <option value="YES">YES (HOD Co-Sign)</option>
-                          </select>
-                        </div>
-                        <div>
-                          <label className="text-xs font-bold text-slate-700 block mb-1">Accompanied Count *</label>
-                          <select
-                            name="accompaniedByCount"
-                            value={formData.accompaniedByCount}
-                            onChange={handleInputChange}
-                            className="w-full h-10 border border-slate-300 rounded-xl px-3 text-sm focus:border-blue-500 focus:outline-none bg-white"
-                          >
-                            {[0,1,2,3,4].map(n => <option key={n} value={n}>{n} Guests</option>)}
-                          </select>
-                        </div>
-                      </div>
-
-                      <div>
-                        <label className="text-xs font-bold text-slate-700 block mb-1">Declared Assets / Accessories</label>
-                        <textarea
-                          name="accessories"
-                          placeholder="Laptops, toolboxes, chemical testing containers..."
-                          value={formData.accessories}
-                          onChange={handleInputChange}
-                          className="w-full min-h-[76px] border border-slate-300 rounded-xl p-3 text-sm focus:border-blue-500 focus:outline-none resize-none"
-                        />
-                      </div>
-
-                    </div>
-
-                  </div>
-
-                  {/* Actions buttons */}
-                  <div className="flex items-center justify-between border-t border-slate-100 pt-6 mt-8">
-                    <span className="text-[11px] font-bold text-slate-400">* Mandatory Security Credentials</span>
-                    <button
-                      type="submit"
-                      className="px-6 py-3 bg-[#0F172A] hover:bg-slate-905 text-white rounded-xl text-xs font-extrabold flex items-center gap-1.5 transition-colors cursor-pointer"
-                    >
-                      Next Step: Photo Capture <ArrowRight className="w-4 h-4" />
-                    </button>
-                  </div>
-
-                </form>
-              </div>
-
-            </motion.div>
-          )}
-
-          {/* STEP 4: PHOTO VERIFICATION */}
-          {currentStep === "PHOTO_VERIFY" && (
-            <motion.div
-              key="photo_verify"
-              initial={{ opacity: 0, y: 15 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -15 }}
-              className="bg-white border border-slate-200 rounded-3xl p-8 shadow-xl text-center flex flex-col items-center"
-            >
-              <h2 className="text-xl md:text-2xl font-black text-[#0F172A] tracking-tight mb-2">
-                Biometric Photo Verification
-              </h2>
-              <p className="text-xs text-slate-500 font-medium max-w-sm mb-8">
-                Take a quick camera scan at the kiosk or upload a clean passport-size photo to print on your refinery access card.
-              </p>
-
-              <div className="flex flex-col md:flex-row gap-10 items-center justify-center w-full max-w-2xl bg-slate-50 border border-slate-200 p-6 rounded-2xl">
-                
-                {/* Camera Screen */}
-                <div className="w-64 h-64 bg-slate-900 rounded-2xl overflow-hidden border border-slate-300 relative shadow-inner shrink-0 flex items-center justify-center">
-                  {useWebcam ? (
-                    <Webcam
-                      audio={false}
-                      ref={webcamRef}
-                      screenshotFormat="image/jpeg"
-                      className="w-full h-full object-cover"
-                    />
-                  ) : capturedPhoto ? (
-                    <img src={capturedPhoto} alt="Captured Profile" className="w-full h-full object-cover" />
-                  ) : (
-                    <div className="text-slate-500 flex flex-col items-center gap-2">
-                      <Camera className="w-8 h-8 opacity-40 animate-bounce" />
-                      <span className="text-[10px] font-mono tracking-wider font-bold">LENS_OFFLINE</span>
-                    </div>
-                  )}
-                </div>
-
-                {/* Control Panel */}
-                <div className="flex flex-col gap-3 justify-center text-left w-full md:w-auto shrink-0">
-                  {useWebcam ? (
-                    <button
-                      onClick={captureWebcamPhoto}
-                      className="px-6 py-3 bg-[#2563EB] hover:bg-blue-700 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer shadow-md"
-                    >
-                      <Camera className="w-4 h-4" /> Trigger Capture
-                    </button>
-                  ) : (
-                    <button
-                      onClick={() => setUseWebcam(true)}
-                      className="px-6 py-3 bg-[#0F172A] hover:bg-slate-900 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer shadow-md"
-                    >
-                      <Camera className="w-4 h-4 text-[#FBBF24]" /> Start Live WebCam
-                    </button>
-                  )}
-
-                  <div className="relative">
-                    <button
-                      onClick={() => document.getElementById("profile-uploader")?.click()}
-                      className="px-6 py-3 w-full bg-white hover:bg-slate-100 border border-slate-200 text-slate-700 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer shadow-sm"
-                    >
-                      <UploadCloud className="w-4 h-4 text-[#2563EB]" /> Upload Pass Photo
-                    </button>
-                    <input 
-                      id="profile-uploader" 
-                      type="file" 
-                      accept="image/*" 
-                      className="hidden" 
-                      onChange={handlePhotoUpload} 
-                    />
-                  </div>
-
-                  <div className="border-t border-slate-200 pt-3 mt-2">
-                    <p className="text-[10px] font-semibold text-slate-400 max-w-[200px] leading-normal">
-                      Ensure your face is clear, centered, and well-lit. Hat and sunglasses must be removed.
-                    </p>
-                  </div>
-                </div>
-
-              </div>
-
-              {/* Action */}
-              <div className="flex items-center gap-4 border-t border-slate-100 pt-6 mt-8 w-full justify-between">
-                <button
-                  onClick={() => setCurrentStep("FORM_DETAILS")}
-                  className="px-5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-lg transition-colors cursor-pointer border"
-                >
-                  Back to Details
-                </button>
-                
-                <button
-                  disabled={!capturedPhoto}
-                  onClick={() => setCurrentStep("REVIEW_SIGN")}
-                  className="px-6 py-3 bg-[#0F172A] hover:bg-slate-900 disabled:bg-slate-200 disabled:text-slate-400 text-white rounded-xl text-xs font-extrabold flex items-center gap-1.5 transition-colors cursor-pointer"
-                >
-                  Next Step: Final Review <ArrowRight className="w-4 h-4" />
-                </button>
-              </div>
-
-            </motion.div>
-          )}
-
-          {/* STEP 5: FINAL REVIEW & SIGNATURE */}
-          {currentStep === "REVIEW_SIGN" && (
-            <motion.div
-              key="review_sign"
-              initial={{ opacity: 0, y: 15 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -15 }}
-              className="bg-white border border-slate-200 rounded-3xl overflow-hidden shadow-xl"
-            >
-              
-              <div className="bg-[#0F172A] px-8 py-5 border-b border-slate-950 text-white flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <ShieldCheck className="w-5 h-5 text-[#FBBF24]" />
-                  <div className="text-left">
-                    <h3 className="text-md font-extrabold text-white leading-none">Security Statement & Review</h3>
-                    <span className="text-[9px] uppercase font-bold text-slate-400 tracking-wider block mt-1">IGL entrance compliance co-signing</span>
-                  </div>
-                </div>
-              </div>
-
-              <div className="p-8">
-                
-                {/* Summary Grid card */}
-                <div className="grid grid-cols-1 md:grid-cols-12 gap-8 text-left bg-slate-50 border border-slate-200 rounded-2xl p-6">
-                  
-                  {/* Photo Profile preview */}
-                  <div className="md:col-span-3 flex flex-col items-center text-center">
-                    <div className="w-32 h-32 bg-slate-200 border-2 border-slate-350 rounded-2xl overflow-hidden shadow-sm shrink-0">
-                      {capturedPhoto ? (
-                        <img src={capturedPhoto} alt="Identity scan" className="w-full h-full object-cover" />
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center text-slate-400 text-[10px]">
-                          No Photo
-                        </div>
-                      )}
-                    </div>
-                    <span className="px-2 py-0.5 rounded bg-blue-100 text-[#2563EB] text-[9px] font-bold mt-3 border border-blue-205 uppercase">
-                      VERIFIED_IMAGE
-                    </span>
-                  </div>
-
-                  {/* Summary lists */}
-                  <div className="md:col-span-9 grid grid-cols-2 gap-y-4 gap-x-6 text-xs text-slate-600 font-semibold">
-                    <div>
-                      <span className="text-[10px] font-mono text-slate-400 uppercase leading-none block">VISITOR NAME</span>
-                      <span className="text-slate-900 font-bold text-sm mt-1 block">{formData.title} {formData.fullName}</span>
-                    </div>
-
-                    <div>
-                      <span className="text-[10px] font-mono text-slate-400 uppercase leading-none block">ACCESS PASS ID</span>
-                      <span className="text-slate-900 font-mono font-bold mt-1 block">{formData.cardId}</span>
-                    </div>
-
-                    <div>
-                      <span className="text-[10px] font-mono text-slate-400 uppercase leading-none block">DEPARTMENT TO VISIT</span>
-                      <span className="text-slate-900 font-bold mt-1 block">{formData.department}</span>
-                    </div>
-
-                    <div>
-                      <span className="text-[10px] font-mono text-slate-400 uppercase leading-none block">HOST STAFF</span>
-                      <span className="text-slate-900 font-bold mt-1 block">{formData.hostEmployee.split(' (')[0]}</span>
-                    </div>
-
-                    <div>
-                      <span className="text-[10px] font-mono text-slate-400 uppercase leading-none block">CLEARANCE ACCESS</span>
-                      <span className="px-2 py-0.5 rounded bg-blue-50 text-[#2563EB] text-[10px] font-bold border border-blue-200 inline-block mt-1">
-                        UP TO {formData.upTo.toUpperCase()} BLOCK
-                      </span>
-                    </div>
-
-                    <div>
-                      <span className="text-[10px] font-mono text-slate-400 uppercase leading-none block">PHONE NUMBER</span>
-                      <span className="text-slate-900 font-semibold mt-1 block">{formData.phoneNumber}</span>
-                    </div>
-
-                    {formData.accessories && (
-                      <div className="col-span-2 border-t border-slate-200 pt-3 mt-1">
-                        <span className="text-[10px] font-mono text-slate-400 uppercase leading-none block">DECLARED ASSETS</span>
-                        <span className="text-slate-700 mt-1 block font-mono bg-white border p-2 rounded-lg text-[11px]">{formData.accessories}</span>
-                      </div>
-                    )}
-                  </div>
-
-                </div>
-
-                {/* Safety compliance legal signoff */}
-                <div className="mt-8 border-t border-slate-100 pt-6">
-                  <div className="bg-amber-50/50 border border-amber-250 rounded-2xl p-4 flex gap-3 text-left">
-                    <AlertCircle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
-                    <div className="space-y-3">
-                      <p className="text-xs font-bold text-amber-800 uppercase tracking-wide">
-                        IGL Refinery Plant - Health & Safety Compliance Directive
-                      </p>
-                      <p className="text-[10px] font-semibold text-slate-500 leading-normal">
-                        I hereby declare that I do not carry any unauthorized hazardous items, cameras, or chemical agents onto the plant site. I promise to wear full PPE (Personal Protective Equipment) and display my visitor pass visible on my chest at all times during my stay inside the high-risk zones.
-                      </p>
-                      <label className="flex items-center gap-2 select-none cursor-pointer text-xs font-extrabold text-slate-900 pt-1">
-                        <input 
-                          required 
-                          type="checkbox" 
-                          className="h-4.5 w-4.5 accent-[#2563EB] cursor-pointer"
-                        />
-                        <span>I AGREE TO SAFETY DIRECTIVES & DISCLOSE CREDENTIALS</span>
-                      </label>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Submits */}
-                <div className="flex items-center justify-between border-t border-slate-100 pt-6 mt-8">
-                  <button
-                    onClick={() => setCurrentStep("PHOTO_VERIFY")}
-                    className="px-5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-lg transition-colors cursor-pointer border"
-                  >
-                    Back to Photo
-                  </button>
-                  
-                  <button
-                    onClick={handleSubmitRequest}
-                    disabled={isLoading}
-                    className="px-8 py-4 bg-emerald-600 hover:bg-emerald-500 disabled:bg-emerald-800 text-white rounded-xl text-xs font-black tracking-wider flex items-center gap-2 transition-colors cursor-pointer shadow-lg"
-                  >
-                    {isLoading ? (
-                      <span>DISPATCHING REQUEST...</span>
-                    ) : (
-                      <span className="flex items-center gap-1.5">
-                        SUBMIT VISIT REQUEST <Send className="w-4 h-4" />
-                      </span>
-                    )}
-                  </button>
-                </div>
-
-              </div>
-
-            </motion.div>
-          )}
-
-          {/* STEP 6: COMPLETED STUB TICKET (Request Pending receipt only! No pass generated yet!) */}
-          {currentStep === "COMPLETED" && (
+          {isSubmitted ? (
+            /* COMPLETED RECEIPT VIEW */
             <motion.div
               key="completed"
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
-              className="w-full flex flex-col items-center justify-center py-6"
+              className="w-full flex flex-col items-center justify-center h-full overflow-hidden"
             >
-              {/* Receipt Stub */}
               <div 
                 id="printable-badge-card"
                 className="w-full max-w-md bg-white border border-slate-200 rounded-3xl overflow-hidden shadow-2xl relative"
-                style={{
-                  backgroundImage: `radial-gradient(circle at 0% 50%, transparent 16px, white 16px), 
-                                    radial-gradient(circle at 100% 50%, transparent 16px, white 16px)`
-                }}
               >
-                
-                {/* Visual Accent Warning Stripe (Safety Yellow Alert) */}
                 <div className="h-2 bg-[#FBBF24]" />
-
-                {/* Ticket Header */}
                 <div className="bg-[#0F172A] p-6 text-white flex items-center justify-between border-b border-slate-900">
                   <div className="flex items-center gap-3 text-left">
                     <img src={logo} alt="IGL Logo" className="h-10 w-auto bg-white rounded p-1" />
@@ -1156,389 +595,679 @@ export default function VisitorPortal() {
                   </span>
                 </div>
 
-                {/* Card Main Info */}
-                <div className="p-8 text-left relative flex flex-col gap-6">
-                  
-                  {/* Photo & Pass ID row */}
+                <div className="p-8 text-left flex flex-col gap-6">
                   <div className="flex items-center gap-5 pb-5 border-b border-dashed border-slate-200">
                     <div className="w-20 h-20 bg-slate-100 rounded-2xl border border-slate-350 overflow-hidden shadow-inner shrink-0 flex items-center justify-center text-slate-400">
                       {capturedPhoto ? (
-                        <img src={capturedPhoto} alt="Guest face" className="w-full h-full object-cover" />
+                        <img src={capturedPhoto} alt="Guest" className="w-full h-full object-cover" />
                       ) : (
                         <User className="w-8 h-8 opacity-30" />
                       )}
                     </div>
                     <div>
-                      <span className="text-[9px] font-mono text-slate-400 leading-none">VISITOR CLEARANCE QUEUED</span>
-                      <h3 className="text-lg font-black text-[#0F172A] tracking-tight leading-none mt-1">
+                      <span className="text-[9px] font-mono text-slate-400 leading-none block mb-1">VISITOR CLEARANCE QUEUED</span>
+                      <h3 className="text-xl font-black text-[#0F172A] tracking-tight leading-none mt-1">
                         {formData.title} {formData.fullName}
                       </h3>
-                      <span className="px-2 py-0.5 rounded bg-amber-50 text-amber-700 text-[8px] font-bold mt-2 border border-amber-200 inline-block uppercase">
-                        {formData.category} Pass Request
+                      <span className="px-2.5 py-1 rounded bg-amber-50 text-amber-700 text-[9px] font-bold mt-2 border border-amber-200 inline-block uppercase">
+                        {formData.category} Pass
                       </span>
                     </div>
                   </div>
 
-                  {/* Pending notification block */}
-                  <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex gap-2.5 text-xs text-amber-800 leading-relaxed font-semibold">
-                    <Clock className="w-5 h-5 text-amber-600 shrink-0 mt-0.5 animate-spin" />
+                  <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex gap-3 text-xs text-amber-800 leading-relaxed font-semibold">
+                    <Clock className="w-5 h-5 text-amber-600 shrink-0 animate-spin" />
                     <div>
-                      <p className="font-extrabold uppercase text-[10px] tracking-wide text-amber-900 mb-1">Awaiting Host Authorization</p>
-                      <p className="text-[11px] text-amber-800">Your pass request has been dispatched to **{formData.hostEmployee.split(' (')[0]}** in the **{formData.department}** department. Your check-in pass will generate automatically once approved.</p>
+                      <p className="font-extrabold uppercase text-[10px] tracking-wide text-amber-900 mb-1">Awaiting Authorization</p>
+                      <p className="text-[11px] text-amber-800">Dispatched to **{formatHostName(formData.hostEmployee)}** in **{formData.department}**. Pass generates automatically once approved.</p>
                     </div>
                   </div>
 
-                  {/* Core ticket specs grid */}
-                  <div className="grid grid-cols-2 gap-y-4 text-xs font-bold text-slate-500">
-                    
+                  <div className="grid grid-cols-2 gap-y-5 text-xs font-bold text-slate-500">
                     <div>
-                      <span className="text-[9px] font-mono text-slate-400 leading-none block">CLEARANCE CLEARANCE</span>
-                      <span className="text-slate-900 mt-1 block uppercase">UP TO {formData.upTo.toUpperCase()}</span>
+                      <span className="text-[9px] font-mono text-slate-400 leading-none block">ACCESS ZONE</span>
+                      <span className="text-slate-900 mt-1 block uppercase">UP TO {formData.upTo}</span>
                     </div>
-
                     <div>
                       <span className="text-[9px] font-mono text-slate-400 leading-none block">REQUEST ID NO.</span>
                       <span className="text-slate-900 font-mono mt-1 block">{formData.cardId}</span>
                     </div>
-
                     <div>
                       <span className="text-[9px] font-mono text-slate-400 leading-none block">DEPARTMENT</span>
                       <span className="text-slate-900 mt-1 block">{formData.department}</span>
                     </div>
-
                     <div>
                       <span className="text-[9px] font-mono text-slate-400 leading-none block">VISIT PURPOSE</span>
                       <span className="text-slate-900 mt-1 block">{formData.purpose}</span>
                     </div>
-
-                    <div className="col-span-2 border-t border-slate-100 pt-3">
+                    <div className="col-span-2 border-t border-slate-100 pt-4">
                       <span className="text-[9px] font-mono text-slate-400 leading-none block">TIMEFRAME DETAILS (IST)</span>
-                      <span className="text-slate-900 mt-1 block font-mono text-[10px]">
+                      <span className="text-slate-900 mt-1 block font-mono text-[11px]">
                         {new Date(formData.arrivalDate).toLocaleString("en-IN")} - {new Date(formData.validUpTo).toLocaleString("en-IN")}
                       </span>
                     </div>
-
                   </div>
-
                 </div>
-
-                {/* Footer instructions */}
-                <div className="bg-slate-50 p-4 border-t border-slate-200 text-center text-[9px] font-mono text-slate-500 leading-normal">
-                  THIS IS A RECEIPT ONLY. <br />
-                  DO NOT CROSS GATES UNTIL PASS IS OFFICIALLY APPROVED.
+                <div className="bg-slate-50 p-4 border-t border-slate-200 text-center text-[10px] font-mono font-bold text-slate-500">
+                  RECEIPT ONLY. DO NOT CROSS GATES UNTIL APPROVED.
                 </div>
-
               </div>
 
-              {/* Printable Controls */}
-              <div className="mt-8 flex flex-col sm:flex-row gap-3 print:hidden">
-                <button
-                  onClick={handlePrint}
-                  className="px-6 py-3.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-extrabold flex items-center justify-center gap-1.5 cursor-pointer shadow-md"
-                >
-                  <Printer className="w-4 h-4 text-[#FBBF24]" /> Print Receipt
+              <div className="mt-8 flex gap-4 print:hidden">
+                <button onClick={handlePrint} className="px-6 py-3.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-black tracking-wide flex items-center gap-2 shadow-xl shadow-slate-900/20 cursor-pointer">
+                  <Printer className="w-4 h-4 text-[#FBBF24]" /> PRINT RECEIPT
                 </button>
-                
-                <button
-                  onClick={resetKiosk}
-                  className="px-6 py-3.5 bg-white hover:bg-slate-55 text-slate-700 border border-slate-250 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer shadow-sm"
-                >
-                  Return to Portal Home
+                <button onClick={resetKiosk} className="px-6 py-3.5 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 rounded-xl text-xs font-bold shadow-sm cursor-pointer">
+                  NEW REGISTRATION
                 </button>
               </div>
-
             </motion.div>
-          )}
+          ) : entryMode === 'login' ? (
 
-          {/* DYNAMIC VISITOR STATUS CHECKING LAYOUT (Latest pass generated recently - lastest one only) */}
-          {currentStep === "STATUS_CHECK" && (
+            /* KIOSK LOGIN SCREEN */
             <motion.div
-              key="status_check"
-              initial={{ opacity: 0, y: 15 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -15 }}
-              className="bg-white border border-slate-200 rounded-3xl p-8 shadow-xl text-center flex flex-col items-center"
+              key="login_screen"
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, y: -20 }}
+              className="w-full max-w-md bg-white/90 backdrop-blur-md border border-slate-200 rounded-[2rem] shadow-2xl p-10 flex flex-col items-center text-center"
             >
-              <div className="w-16 h-16 bg-[#2563EB]/10 rounded-2xl flex items-center justify-center text-[#2563EB] mb-6 border border-[#2563EB]/20">
-                <ShieldCheck className="w-8 h-8 text-[#2563EB]" />
+              <div className="w-16 h-16 bg-blue-50 text-[#2563EB] rounded-2xl flex items-center justify-center mb-6 border border-blue-100">
+                <ShieldCheck className="w-8 h-8" />
               </div>
-              <h2 className="text-2xl font-black text-[#0F172A] tracking-tight mb-2">
-                Check My Pass Status
-              </h2>
-              <p className="text-xs text-slate-500 font-medium max-w-sm mb-8 leading-relaxed">
-                Enter your registered 10-digit mobile number below to access and print your most recently generated visit pass.
+              <h2 className="text-2xl font-black text-[#0F172A] tracking-tight mb-2">Unlock Kiosk</h2>
+              <p className="text-xs font-semibold text-slate-500 mb-8 px-4">
+                Staff login required to open the kiosk for the day. Unlocks the system for 12 hours.
               </p>
 
-              <form onSubmit={handleCheckStatus} className="w-full max-w-md space-y-4">
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-450">
-                    <Phone className="w-4 h-4" />
-                  </div>
-                  <input
-                    required
-                    type="text"
-                    placeholder="Enter 10-digit mobile (e.g. 9876543210)"
-                    value={statusPhone}
-                    onChange={(e) => setStatusPhone(e.target.value)}
-                    className="w-full h-12 bg-slate-50 border border-slate-350 rounded-xl pl-10 pr-4 text-sm font-semibold text-slate-900 focus:border-[#2563EB] focus:ring-1 focus:ring-blue-500 focus:outline-none transition-colors"
-                  />
-                </div>
-
-                <button
+              <form onSubmit={handleKioskLogin} className="w-full flex flex-col gap-4">
+                <input 
+                  type="text" 
+                  required
+                  placeholder="Employee ID"
+                  value={employeeId}
+                  onChange={(e) => setEmployeeId(e.target.value)}
+                  className="w-full h-14 border border-slate-200 rounded-xl px-4 text-sm font-bold bg-slate-50 hover:bg-slate-50 focus:bg-white focus:border-[#2563EB] focus:ring-4 focus:ring-[#2563EB]/10 transition-all outline-none text-[#0F172A] shadow-sm"
+                />
+                <input 
+                  type="password" 
+                  required
+                  placeholder="Password"
+                  value={adminPassword}
+                  onChange={(e) => setAdminPassword(e.target.value)}
+                  className="w-full h-14 border border-slate-200 rounded-xl px-4 text-sm font-bold bg-slate-50 hover:bg-slate-50 focus:bg-white focus:border-[#2563EB] focus:ring-4 focus:ring-[#2563EB]/10 transition-all outline-none text-[#0F172A] shadow-sm"
+                />
+                <button 
                   type="submit"
                   disabled={isLoading}
-                  className="w-full h-11 bg-[#0F172A] hover:bg-slate-900 disabled:bg-slate-700 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer shadow-md transition-colors"
+                  className="w-full h-14 bg-[#0F172A] hover:bg-slate-800 disabled:bg-slate-400 text-white rounded-xl text-xs font-black tracking-widest flex items-center justify-center gap-2 transition-all shadow-xl shadow-slate-900/20 cursor-pointer mt-2"
                 >
-                  {isLoading ? (
-                    <RefreshCw className="w-4 h-4 animate-spin text-[#FBBF24]" />
-                  ) : (
-                    <>
-                      <Search className="w-4 h-4 text-[#FBBF24]" /> Query Active Passes
-                    </>
-                  )}
+                  {isLoading ? <Clock className="w-4 h-4 animate-spin" /> : "UNLOCK SYSTEM"}
                 </button>
               </form>
+            </motion.div>
 
-              {/* Status query results */}
-              <div className="w-full max-w-md mt-8">
-                
-                {statusError && (
-                  <motion.div 
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    className="bg-red-50 border border-red-200 rounded-2xl p-4 flex gap-3 text-left"
+          ) : entryMode === 'idle' ? (
+            
+            /* IDLE SCREEN (WELCOME / SELECTION) */
+            <motion.div
+              key="idle_screen"
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, y: -20 }}
+              className="w-full max-w-2xl bg-white/80 backdrop-blur-md border border-slate-200 rounded-[2rem] shadow-2xl p-12 flex flex-col items-center text-center"
+            >
+              <div className="w-20 h-20 bg-blue-50 text-[#2563EB] rounded-3xl flex items-center justify-center mb-8 shadow-inner border border-blue-100">
+                <Fingerprint className="w-10 h-10" />
+              </div>
+              <h2 className="text-3xl font-black text-[#0F172A] tracking-tight mb-4">Visitor Check-In Kiosk</h2>
+              <p className="text-sm font-semibold text-slate-500 mb-10 max-w-md">
+                Welcome to Indian Glycol Limited. Please select your registration type to proceed with clearance checks.
+              </p>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 w-full">
+                <button 
+                  onClick={() => setEntryMode('phone_entry')}
+                  className="bg-white hover:bg-slate-50 border border-slate-200 p-6 rounded-2xl flex flex-col items-center gap-3 transition-all shadow-sm hover:shadow-md cursor-pointer group"
+                >
+                  <div className="w-12 h-12 bg-indigo-50 rounded-full flex items-center justify-center group-hover:scale-110 transition-transform">
+                    <Phone className="w-5 h-5 text-indigo-600" />
+                  </div>
+                  <div>
+                    <span className="block text-sm font-black text-[#0F172A]">Returning Visitor</span>
+                    <span className="block text-[10px] font-bold text-slate-400 mt-1 uppercase tracking-wider">Fast-track Autofill</span>
+                  </div>
+                </button>
+                <button 
+                  onClick={() => setEntryMode('form')}
+                  className="bg-[#0F172A] hover:bg-slate-900 border border-slate-800 p-6 rounded-2xl flex flex-col items-center gap-3 transition-all shadow-lg shadow-slate-900/20 group cursor-pointer"
+                >
+                  <div className="w-12 h-12 bg-white/10 rounded-full flex items-center justify-center group-hover:scale-110 transition-transform">
+                    <UserPlus className="w-5 h-5 text-[#FBBF24]" />
+                  </div>
+                  <div>
+                    <span className="block text-sm font-black text-white">New Registration</span>
+                    <span className="block text-[10px] font-bold text-slate-400 mt-1 uppercase tracking-wider">First time visit</span>
+                  </div>
+                </button>
+              </div>
+            </motion.div>
+
+          ) : entryMode === 'phone_entry' ? (
+
+            /* PHONE LOOKUP SCREEN */
+            <motion.div
+              key="phone_entry"
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="w-full max-w-md bg-white border border-slate-200 rounded-3xl shadow-2xl overflow-hidden"
+            >
+              <div className="p-8 pb-6 flex flex-col items-center text-center">
+                <div className="w-16 h-16 bg-blue-50 text-[#2563EB] rounded-2xl flex items-center justify-center mb-6 border border-blue-100">
+                  <Phone className="w-8 h-8" />
+                </div>
+                <h3 className="text-2xl font-black text-[#0F172A] tracking-tight mb-2">Registered Phone</h3>
+                <p className="text-xs font-semibold text-slate-500 mb-8">
+                  Enter your previously registered phone number to autofill your clearance details.
+                </p>
+
+                <form onSubmit={handlePhoneLookup} className="w-full flex flex-col gap-4">
+                  <div className="relative">
+                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 font-bold">+91</span>
+                    <input 
+                      type="tel" 
+                      required
+                      autoFocus
+                      placeholder="10-digit mobile number"
+                      value={searchPhone}
+                      onChange={(e) => setSearchPhone(e.target.value)}
+                      className="w-full h-14 border-2 border-slate-200 rounded-xl pl-12 pr-4 text-sm font-black bg-slate-50 hover:bg-slate-50 focus:bg-white focus:border-[#2563EB] focus:ring-4 focus:ring-[#2563EB]/10 transition-all outline-none text-[#0F172A] shadow-sm tracking-widest"
+                    />
+                  </div>
+                  
+                  <button 
+                    type="submit"
+                    disabled={isLoading}
+                    className="w-full h-14 bg-[#2563EB] hover:bg-blue-600 disabled:bg-slate-400 text-white rounded-xl text-xs font-black tracking-widest flex items-center justify-center gap-2 transition-all shadow-xl shadow-blue-500/20 cursor-pointer mt-2"
                   >
-                    <AlertCircle className="w-5 h-5 text-red-650 shrink-0 mt-0.5" />
-                    <div>
-                      <p className="text-xs font-bold text-red-800 uppercase tracking-wide">Pass Record Not Found</p>
-                      <p className="text-[11px] font-semibold text-slate-500 mt-1">{statusError}</p>
-                      <button
-                        onClick={() => {
-                          setRegistrationMode("MANUAL");
-                          setCurrentStep("FORM_DETAILS");
-                        }}
-                        className="mt-3 px-3 py-1.5 bg-[#2563EB] hover:bg-blue-700 text-white text-[10px] font-bold rounded-lg transition-colors cursor-pointer"
-                      >
-                        Register New Pass
-                      </button>
-                    </div>
-                  </motion.div>
-                )}
-
-                {statusResult && (
-                  <motion.div
-                    initial={{ opacity: 0, scale: 0.98 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    className="border border-slate-200 rounded-3xl overflow-hidden shadow-lg bg-slate-50 text-left"
+                    {isLoading ? <Clock className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
+                    {isLoading ? "SEARCHING..." : "SEARCH RECORDS"}
+                  </button>
+                  <button 
+                    type="button"
+                    onClick={() => {
+                      setSearchPhone("");
+                      setEntryMode('idle');
+                    }}
+                    className="w-full h-12 bg-white hover:bg-slate-50 border border-slate-200 text-slate-600 rounded-xl text-xs font-bold transition-all mt-1"
                   >
-                    
-                    {/* Header status bar */}
-                    <div className="bg-[#0F172A] px-6 py-4 text-white flex items-center justify-between border-b border-slate-950">
-                      <div>
-                        <span className="text-[8px] font-mono text-slate-500 uppercase tracking-widest leading-none block">LATEST ACTIVE PASS RECORD ONLY</span>
-                        <h4 className="text-sm font-extrabold text-white mt-1 block leading-none">{statusResult.visitor_name}</h4>
-                      </div>
+                    Cancel
+                  </button>
+                </form>
+              </div>
+            </motion.div>
 
-                      {/* Status indicator badges */}
-                      {statusResult.status === "APPROVED" && (
-                        <span className="px-2.5 py-1 rounded-full bg-[#22C55E]/20 text-[#22C55E] text-[10px] font-black border border-[#22C55E]/30 animate-pulse uppercase">
-                          APPROVED
-                        </span>
-                      )}
-                      {statusResult.status === "PENDING" && (
-                        <span className="px-2.5 py-1 rounded-full bg-amber-500/10 text-amber-400 text-[10px] font-black border border-amber-500/20 animate-pulse uppercase">
-                          PENDING
-                        </span>
-                      )}
-                      {statusResult.status === "CHECKED_IN" && (
-                        <span className="px-2.5 py-1 rounded-full bg-[#2563EB]/25 text-[#2563EB] text-[10px] font-black border border-[#2563EB]/20 animate-pulse uppercase">
-                          CHECKED IN
-                        </span>
-                      )}
-                      {statusResult.status === "REJECTED" && (
-                        <span className="px-2.5 py-1 rounded-full bg-red-500/10 text-red-400 text-[10px] font-black border border-red-500/20 uppercase">
-                          REJECTED
-                        </span>
-                      )}
-                      {statusResult.status === "CHECKED_OUT" && (
-                        <span className="px-2.5 py-1 rounded-full bg-slate-500/10 text-slate-400 text-[10px] font-black border border-slate-500/20 uppercase">
-                          CHECKED OUT
-                        </span>
-                      )}
-                    </div>
+          ) : entryMode === 'meetings_list' ? (
 
-                    <div className="p-6 space-y-4">
-                      
-                      <div className="grid grid-cols-2 gap-y-4 text-xs font-bold text-slate-500 text-left">
-                        <div>
-                          <span className="text-[9px] font-mono text-slate-400 leading-none block">PASS NUMBER</span>
-                          <span className="text-slate-900 font-mono mt-1 block">{statusResult.card_id || "NOT_ASSIGNED"}</span>
-                        </div>
-                        <div>
-                          <span className="text-[9px] font-mono text-slate-400 leading-none block">DEPARTMENT</span>
-                          <span className="text-slate-900 mt-1 block">{statusResult.department_name}</span>
-                        </div>
-                        <div className="col-span-2">
-                          <span className="text-[9px] font-mono text-slate-400 leading-none block">HOST STAFF MEMBER</span>
-                          <span className="text-slate-900 mt-1 block">{statusResult.host_employee}</span>
-                        </div>
-                        <div className="col-span-2 border-t border-slate-200 pt-3">
-                          <span className="text-[9px] font-mono text-slate-400 leading-none block">VISIT PURPOSE</span>
-                          <span className="text-slate-700 mt-1 block font-mono bg-white border p-2 rounded-lg text-[11px] leading-relaxed">
-                            {statusResult.purpose}
-                          </span>
-                        </div>
-                      </div>
-
-                      {/* Warning alerts / directions based on status */}
-                      {statusResult.status === "PENDING" && (
-                        <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 flex gap-2 text-[11px] text-amber-800">
-                          <Clock className="w-4 h-4 shrink-0 mt-0.5 animate-spin" />
-                          <p>Your request is awaiting approval from <strong>{statusResult.host_employee?.split(" (")[0]}</strong>. A gate pass will be available here once the status updates to <strong>APPROVED</strong>.</p>
-                        </div>
-                      )}
-                      
-                      {statusResult.status === "APPROVED" && (
-                        <div className="space-y-4 pt-2 border-t border-slate-200">
-                          <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 flex gap-2 text-[11px] text-emerald-800">
-                            <UserCheck className="w-4 h-4 shrink-0 mt-0.5 text-emerald-600" />
-                            <p>Your pass has been <strong>approved</strong>. Present this pass at the security gate to check in.</p>
-                          </div>
-
-                          {/* Full Approved Pass Card */}
-                          <div
-                            id="printable-badge-card"
-                            className="bg-white border-2 border-slate-200 rounded-2xl overflow-hidden shadow-md"
-                          >
-                            {/* Pass Header */}
-                            <div className="bg-[#0F172A] px-5 py-4 flex items-center justify-between border-b border-slate-900">
-                              <div className="flex items-center gap-3">
-                                <img src={logo} alt="IGL" className="h-9 w-auto bg-white rounded p-1" />
-                                <div>
-                                  <p className="text-[10px] font-black text-white leading-tight">INDIAN GLYCOL LIMITED</p>
-                                  <p className="text-[8px] font-bold text-[#FBBF24] uppercase tracking-widest mt-0.5">Approved Visitor Pass</p>
-                                </div>
-                              </div>
-                              <span className="px-2.5 py-1 rounded-full bg-emerald-500/20 text-emerald-400 text-[9px] font-black border border-emerald-500/30 uppercase">
-                                APPROVED
-                              </span>
-                            </div>
-
-                            {/* Pass Body */}
-                            <div className="p-5">
-                              <div className="flex gap-5 items-start mb-5 pb-4 border-b border-dashed border-slate-200">
-                                {/* QR Code Placeholder */}
-                                <div className="shrink-0 bg-white border-2 border-slate-200 rounded-xl p-2 w-20 h-20 flex items-center justify-center">
-                                  <svg viewBox="0 0 21 21" className="w-full h-full" fill="currentColor" style={{ color: '#0F172A' }}>
-                                    {/* QR pattern based on card_id */}
-                                    <rect x="0" y="0" width="7" height="7" rx="1" />
-                                    <rect x="1" y="1" width="5" height="5" rx="0.5" fill="white" />
-                                    <rect x="2" y="2" width="3" height="3" rx="0.5" />
-                                    <rect x="14" y="0" width="7" height="7" rx="1" />
-                                    <rect x="15" y="1" width="5" height="5" rx="0.5" fill="white" />
-                                    <rect x="16" y="2" width="3" height="3" rx="0.5" />
-                                    <rect x="0" y="14" width="7" height="7" rx="1" />
-                                    <rect x="1" y="15" width="5" height="5" rx="0.5" fill="white" />
-                                    <rect x="2" y="16" width="3" height="3" rx="0.5" />
-                                    <rect x="9" y="0" width="2" height="2" />
-                                    <rect x="9" y="3" width="2" height="2" />
-                                    <rect x="12" y="0" width="2" height="2" />
-                                    <rect x="9" y="9" width="3" height="2" />
-                                    <rect x="13" y="9" width="2" height="3" />
-                                    <rect x="9" y="13" width="2" height="4" />
-                                    <rect x="12" y="12" width="2" height="2" />
-                                    <rect x="16" y="12" width="2" height="2" />
-                                    <rect x="14" y="16" width="3" height="2" />
-                                    <rect x="19" y="14" width="2" height="3" />
-                                  </svg>
-                                </div>
-                                <div className="flex-1 min-w-0">
-                                  <p className="text-[8px] font-mono text-slate-400 uppercase tracking-widest">Pass Holder</p>
-                                  <h3 className="text-base font-black text-[#0F172A] mt-0.5 leading-tight">{statusResult.visitor_name}</h3>
-                                  <p className="text-[10px] font-mono text-slate-500 mt-1">{statusResult.card_id}</p>
-                                </div>
-                              </div>
-
-                              {/* Details Grid */}
-                              <div className="grid grid-cols-2 gap-3 text-xs">
-                                <div>
-                                  <p className="text-[9px] font-mono text-slate-400 uppercase tracking-widest">Host</p>
-                                  <p className="font-bold text-slate-800 mt-0.5">{statusResult.host_employee?.split(" (")[0]}</p>
-                                </div>
-                                <div>
-                                  <p className="text-[9px] font-mono text-slate-400 uppercase tracking-widest">Department</p>
-                                  <p className="font-bold text-slate-800 mt-0.5">{statusResult.department_name}</p>
-                                </div>
-                                <div>
-                                  <p className="text-[9px] font-mono text-slate-400 uppercase tracking-widest">Purpose</p>
-                                  <p className="font-bold text-slate-800 mt-0.5">{statusResult.purpose}</p>
-                                </div>
-                                <div>
-                                  <p className="text-[9px] font-mono text-slate-400 uppercase tracking-widest">Pass ID</p>
-                                  <p className="font-mono font-bold text-slate-800 mt-0.5">{statusResult.card_id}</p>
-                                </div>
-                                {statusResult.arrival_date && (
-                                  <div className="col-span-2 border-t border-slate-100 pt-3">
-                                    <p className="text-[9px] font-mono text-slate-400 uppercase tracking-widest">Valid Window (IST)</p>
-                                    <p className="font-semibold text-slate-700 mt-0.5 text-[10px]">
-                                      {new Date(statusResult.arrival_date).toLocaleString("en-IN")}
-                                      {" → "}
-                                      {statusResult.valid_up_to ? new Date(statusResult.valid_up_to).toLocaleString("en-IN") : "—"}
-                                    </p>
-                                  </div>
-                                )}
-                              </div>
-
-                              {/* Barcode strip */}
-                              <div className="mt-4 pt-3 border-t border-dashed border-slate-200 flex flex-col items-center">
-                                <svg className="w-full h-8" viewBox="0 0 200 20" fill="currentColor" style={{ color: '#0F172A' }}>
-                                  {[3,6,9,11,14,17,20,22,26,29,32,35,38,40,44,47,50,53,56,58,62,65,68,71,74,76,80,83,86,89,92,95,98,100,104,107,110,113,116,119,122,125,128,130,134,137,140,143,146,149,152,154,158,161,164,167,170,173,176,178,182,185,188,191,194,197].map((x, i) => (
-                                    <rect key={i} x={x} y="0" width={i % 3 === 0 ? 2 : 1} height="20" />
-                                  ))}
-                                </svg>
-                                <span className="text-[8px] font-mono text-slate-400 tracking-[0.3em] mt-1">{statusResult.card_id}</span>
-                              </div>
-                            </div>
-                          </div>
-
-                          <button
-                            onClick={() => window.print()}
-                            className="w-full py-2.5 bg-[#0F172A] hover:bg-slate-900 text-white text-xs font-bold rounded-xl flex items-center justify-center gap-1.5 shadow cursor-pointer transition-colors"
-                          >
-                            <Printer className="w-4 h-4 text-[#FBBF24]" /> Print Gate Entry Pass
-                          </button>
-                        </div>
-                      )}
-
-                      {statusResult.status === "CHECKED_IN" && (
-                        <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 flex gap-2 text-[11px] text-blue-800">
-                          <ShieldCheck className="w-4 h-4 shrink-0 mt-0.5 text-blue-600" />
-                          <p>You are currently logged inside the plant. Keep your visitor pass visible at all times.</p>
-                        </div>
-                      )}
-
-                      {statusResult.status === "REJECTED" && (
-                        <div className="bg-red-50 border border-red-200 rounded-xl p-3 flex gap-2 text-[11px] text-red-800">
-                          <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5 text-red-500" />
-                          <p>This pass has been rejected. Please contact the Administration Desk for assistance.</p>
-                        </div>
-                      )}
-
-                    </div>
-
-                  </motion.div>
-                )}
-
+            /* MEETINGS LIST SCREEN */
+            <motion.div
+              key="meetings_list"
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, y: -20 }}
+              className="w-full max-w-2xl bg-white border border-slate-200 rounded-3xl shadow-2xl p-8 flex flex-col overflow-hidden max-h-[85vh]"
+            >
+              <div className="flex flex-col items-center text-center shrink-0 mb-6">
+                <div className="w-14 h-14 bg-blue-50 text-[#2563EB] rounded-2xl flex items-center justify-center mb-4 border border-blue-100">
+                  <Clock className="w-7 h-7 animate-pulse" />
+                </div>
+                <h3 className="text-2xl font-black text-[#0F172A] tracking-tight mb-2">Visitor Scheduled Passes</h3>
+                <p className="text-xs font-semibold text-slate-500 max-w-md">
+                  Choose a pre-created record to check in or proceed with a new registration.
+                </p>
               </div>
 
-              {/* Action Back */}
-              <div className="border-t border-slate-100 pt-6 mt-8 w-full flex justify-start">
-                <button
-                  onClick={() => resetKiosk()}
-                  className="px-5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-lg transition-colors cursor-pointer border"
+              <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar space-y-6 mb-6 text-left">
+                
+                {/* SECTION 1: Created by Employee */}
+                {preRegisteredMeetings.filter((m: any) => m.created_by_employee).length > 0 && (
+                  <div className="space-y-3">
+                    <h4 className="text-[11px] font-extrabold text-[#2563EB] uppercase tracking-wider pl-1">
+                      Created by Employee / Host Staff
+                    </h4>
+                    <div className="space-y-3">
+                      {preRegisteredMeetings.filter((m: any) => m.created_by_employee).map((meeting: any) => (
+                        <div 
+                          key={meeting.visit_id} 
+                          className="p-5 border border-slate-200 hover:border-blue-400 bg-slate-50/50 hover:bg-white rounded-2xl transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-4 cursor-pointer group shadow-sm hover:shadow-md"
+                          onClick={() => handleSelectMeeting(meeting, false)}
+                        >
+                          <div className="text-left space-y-1.5 flex-1">
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs font-extrabold uppercase text-[#2563EB] tracking-wider bg-blue-50 px-2 py-0.5 rounded-md">
+                                {meeting.category || "Visitor"}
+                              </span>
+                              <span className={`text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md ${
+                                meeting.status === 'APPROVED' ? 'bg-green-100 text-green-700 border border-green-200' : 'bg-amber-100 text-amber-700 border border-amber-200'
+                              }`}>
+                                {meeting.status}
+                              </span>
+                            </div>
+                            <h4 className="text-sm font-black text-slate-800">
+                              Meeting with <span className="text-[#0F172A]">{formatHostName(meeting.host_employee)}</span>
+                            </h4>
+                            <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-[11px] font-bold text-slate-500">
+                              <div>
+                                <span className="text-slate-400 font-medium">Department:</span> {meeting.department_name}
+                              </div>
+                              <div>
+                                <span className="text-slate-400 font-medium">Purpose:</span> {meeting.purpose}
+                              </div>
+                              <div className="col-span-2">
+                                <span className="text-slate-400 font-medium">Scheduled Time:</span> {meeting.arrival_date ? new Date(meeting.arrival_date).toLocaleString("en-IN") : "N/A"}
+                              </div>
+                            </div>
+
+                            {meeting.status === 'APPROVED' && (
+                              <div className="mt-2.5 p-2 bg-blue-50 border border-blue-100 rounded-xl flex items-start gap-2 text-[10px] text-blue-800 leading-tight font-semibold">
+                                <AlertCircle className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+                                <div>
+                                  <span>Approved! Select this to verify details, capture photo, and complete pass generation.</span>
+                                </div>
+                              </div>
+                            )}
+                            {meeting.status === 'PENDING' && (
+                              <div className="mt-2.5 p-2 bg-amber-50 border border-amber-100 rounded-xl flex items-start gap-2 text-[10px] text-amber-800 leading-tight font-semibold">
+                                <AlertCircle className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                                <div>
+                                  <span>Awaiting Approval: Select to verify details and complete photo/directives check.</span>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+
+                          <button 
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleSelectMeeting(meeting, false);
+                            }}
+                            className="px-5 py-2.5 bg-[#2563EB] hover:bg-blue-600 text-white text-xs font-black rounded-xl transition-all shadow-md group-hover:scale-105 shrink-0 self-start sm:self-center"
+                          >
+                            Update
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* SECTION 2: Created by Self */}
+                {preRegisteredMeetings.filter((m: any) => !m.created_by_employee).length > 0 && (
+                  <div className="space-y-3 pt-2">
+                    <h4 className="text-[11px] font-extrabold text-slate-500 uppercase tracking-wider pl-1">
+                      Your Past Visit / Self-Registration (Last Entry)
+                    </h4>
+                    <div className="space-y-3">
+                      {preRegisteredMeetings.filter((m: any) => !m.created_by_employee).map((meeting: any) => (
+                        <div 
+                          key={meeting.visit_id} 
+                          className="p-5 border border-slate-200 hover:border-slate-400 bg-slate-50/50 hover:bg-white rounded-2xl transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-4 cursor-pointer group shadow-sm hover:shadow-md"
+                          onClick={() => handleSelectMeeting(meeting, true)}
+                        >
+                          <div className="text-left space-y-1.5 flex-1">
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs font-extrabold uppercase text-slate-600 tracking-wider bg-slate-100 px-2 py-0.5 rounded-md">
+                                {meeting.category || "Visitor"}
+                              </span>
+                              <span className={`text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md ${
+                                meeting.status === 'APPROVED' ? 'bg-green-100 text-green-700 border border-green-200' : 'bg-amber-100 text-amber-700 border border-amber-200'
+                              }`}>
+                                {meeting.status}
+                              </span>
+                            </div>
+                            <h4 className="text-sm font-black text-slate-800">
+                              Meeting with <span className="text-[#0F172A]">{formatHostName(meeting.host_employee)}</span>
+                            </h4>
+                            <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-[11px] font-bold text-slate-500">
+                              <div>
+                                <span className="text-slate-400 font-medium">Department:</span> {meeting.department_name}
+                              </div>
+                              <div>
+                                <span className="text-slate-400 font-medium">Purpose:</span> {meeting.purpose}
+                              </div>
+                              <div className="col-span-2">
+                                <span className="text-slate-400 font-medium">Scheduled Time:</span> {meeting.arrival_date ? new Date(meeting.arrival_date).toLocaleString("en-IN") : "N/A"}
+                              </div>
+                            </div>
+
+                            {meeting.status === 'APPROVED' && (
+                              <div className="mt-2.5 p-2 bg-blue-50 border border-blue-100 rounded-xl flex items-start gap-2 text-[10px] text-blue-800 leading-tight font-semibold">
+                                <AlertCircle className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+                                <div>
+                                  <span>Approved! Select this to verify details, capture photo, and complete pass generation.</span>
+                                </div>
+                              </div>
+                            )}
+                            {meeting.status === 'PENDING' && (
+                              <div className="mt-2.5 p-2 bg-amber-50 border border-amber-100 rounded-xl flex items-start gap-2 text-[10px] text-amber-800 leading-tight font-semibold">
+                                <AlertCircle className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                                <div>
+                                  <span>Awaiting Approval: Select to verify details and complete photo/directives check.</span>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+
+                          <button 
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleSelectMeeting(meeting, true);
+                            }}
+                            className="px-5 py-2.5 bg-slate-700 hover:bg-slate-800 text-white text-xs font-black rounded-xl transition-all shadow-md group-hover:scale-105 shrink-0 self-start sm:self-center"
+                          >
+                            Use Details
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="flex flex-col sm:flex-row gap-3 pt-4 border-t border-slate-100 shrink-0">
+                <button 
+                  type="button"
+                  onClick={handleBypassMeetingsList}
+                  className="flex-1 py-3 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold rounded-xl transition-all shadow-sm flex items-center justify-center gap-2 cursor-pointer"
                 >
-                  Back to Select Mode
+                  None of these / New Registration
                 </button>
+                <button 
+                  type="button"
+                  onClick={() => {
+                    setPreRegisteredMeetings([]);
+                    setEntryMode('phone_entry');
+                  }}
+                  className="py-3 px-6 bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-bold rounded-xl transition-all cursor-pointer"
+                >
+                  Back
+                </button>
+              </div>
+            </motion.div>
+
+          ) : (
+
+            /* FORM LAYOUT */
+            <motion.div
+              key="form_layout"
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, scale: 0.98 }}
+              className="w-full h-full bg-white/95 backdrop-blur-md border border-slate-200 rounded-3xl shadow-2xl flex flex-col md:flex-row overflow-hidden"
+            >
+              
+              {/* LEFT COLUMN: FORM FIELDS */}
+              <form id="visitor-form" onSubmit={handleSubmitRequest} className="w-full md:w-[70%] p-8 flex flex-col h-full relative">
+                <div className="flex items-center justify-between mb-8 shrink-0 border-b border-slate-100 pb-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-full bg-blue-50 flex items-center justify-center">
+                      <ShieldCheck className="w-5 h-5 text-[#2563EB]" />
+                    </div>
+                    <div>
+                      <h2 className="text-xl font-black text-[#0F172A] tracking-tight leading-none">Security Clearance Request</h2>
+                      <span className="text-xs font-semibold text-slate-500 mt-1 block">Please verify your details before submission.</span>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 bg-amber-50 px-3 py-1.5 rounded-full border border-amber-200/60">
+                    <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+                    <span className="text-[10px] font-bold text-amber-800 uppercase tracking-wider">Fast-Track Mode</span>
+                  </div>
+                </div>
+
+                {visitCount !== null && visitCount > 0 && (
+                  <div className="mb-4 p-4 rounded-2xl flex gap-3 text-xs font-semibold leading-relaxed border shrink-0 text-left bg-emerald-50 border-emerald-200 text-emerald-800 animate-in slide-in-from-top duration-300">
+                    <Sparkles className="w-5 h-5 shrink-0 text-emerald-600 animate-pulse" />
+                    <div>
+                      <p className="font-extrabold uppercase text-[10px] tracking-wide mb-0.5 text-emerald-950">
+                        Welcome Back!
+                      </p>
+                      <p className="text-[11px] font-normal text-emerald-800">
+                        You have visited our company <strong>{visitCount} time(s)</strong> in the past. Your details have been auto-filled for a quicker check-in.
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {selectedMeetingId && (
+                  <div className={`mb-6 p-4 rounded-2xl flex gap-3 text-xs font-semibold leading-relaxed border shrink-0 text-left ${
+                    formData.status === 'APPROVED' 
+                      ? 'bg-blue-50 border-blue-200 text-blue-800' 
+                      : 'bg-amber-50 border-amber-200 text-amber-800'
+                  }`}>
+                    <AlertCircle className={`w-5 h-5 shrink-0 ${
+                      formData.status === 'APPROVED' ? 'text-blue-600' : 'text-amber-600'
+                    }`} />
+                    <div>
+                      <p className={`font-extrabold uppercase text-[10px] tracking-wide mb-0.5 ${
+                        formData.status === 'APPROVED' ? 'text-blue-950' : 'text-amber-950'
+                      }`}>
+                        {formData.status === 'APPROVED' ? 'Approval Granted' : 'Approval Pending'}
+                      </p>
+                      <p className="text-[11px]">
+                        {formData.status === 'APPROVED' 
+                          ? 'Your scheduled meeting is already approved. Please capture/upload your photo on the right and accept the safety directives to complete registration.' 
+                          : 'Please fill in any missing details, capture your photo, and submit. The clearance request will be sent to the host employee.'}
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {/* MODERN GRID LAYOUT */}
+                <div className="flex-1 grid grid-cols-4 gap-x-6 gap-y-5 content-start pr-2 custom-scrollbar overflow-y-auto pb-4">
+                  
+                  {/* Row 1 */}
+                  <div className="col-span-1">
+                    <label className={labelClass}>Title</label>
+                    <select disabled={!!selectedMeetingId} name="title" value={formData.title} onChange={handleInputChange} className={inputClass}>
+                      <option value="Mr.">Mr.</option>
+                      <option value="Ms.">Ms.</option>
+                      <option value="Mrs.">Mrs.</option>
+                      <option value="Dr.">Dr.</option>
+                    </select>
+                  </div>
+                  <div className="col-span-1">
+                    <label className={labelClass}>Full Name</label>
+                    <input disabled={!!selectedMeetingId} required type="text" name="fullName" value={formData.fullName} onChange={handleInputChange} className={inputClass} placeholder="Enter your full name" />
+                  </div>
+                  <div className="col-span-1">
+                    <label className={labelClass}>Contact Number</label>
+                    <input disabled={!!selectedMeetingId} required type="text" name="phoneNumber" value={formData.phoneNumber} onChange={handleInputChange} className={inputClass} placeholder="+91" />
+                  </div>
+                  <div className="col-span-1">
+                    <label className={labelClass}>Email (Optional)</label>
+                    <input type="email" name="email" value={formData.email} onChange={handleInputChange} className={inputClass} placeholder="john@example.com" />
+                  </div>
+
+                  {/* Row 2 */}
+                  <div className="col-span-1">
+                    <label className={labelClass}>Location (Plant)</label>
+                    <select disabled={!!selectedMeetingId} name="plant_id" value={formData.plant_id} onChange={handleInputChange} className={inputClass}>
+                      {plants.map(p => (
+                        <option key={p.id} value={p.id}>{p.plant_name} ({p.plant_code})</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="col-span-1">
+                    <label className={labelClass}>Department</label>
+                    <select disabled={!!selectedMeetingId} required name="department" value={formData.department} onChange={handleInputChange} className={inputClass}>
+                      <option value="" disabled>Select Department</option>
+                      {departments.map((d: any) => <option key={d.id} value={d.name}>{d.name}</option>)}
+                    </select>
+                  </div>
+                  <div className="col-span-1">
+                    <label className={labelClass}>Host Employee</label>
+                    <select disabled={!!selectedMeetingId} required name="hostEmployee" value={formData.hostEmployee} onChange={handleInputChange} className={inputClass}>
+                      <option value="" disabled>Select Host</option>
+                      {selectedMeetingId && formData.hostEmployee && !availableHosts.find(h => h.email === formData.hostEmployee || h.label === formData.hostEmployee) && (
+                        <option value={formData.hostEmployee}>{formData.hostEmployee}</option>
+                      )}
+                      {availableHosts.map(h => <option key={h.email} value={h.label}>{h.label}</option>)}
+                    </select>
+                  </div>
+                  <div className="col-span-1">
+                    <label className={labelClass}>Purpose</label>
+                    <select disabled={!!selectedMeetingId} name="purpose" value={formData.purpose} onChange={handleInputChange} className={inputClass}>
+                      <option value="Official">Official Business</option>
+                      <option value="Personal">Personal Visit</option>
+                      <option value="Interview">Candidate Interview</option>
+                      <option value="Vendor">Vendor Maintenance</option>
+                      <option value="Audit">Audit / Inspection</option>
+                      <option value="Delivery">Material Delivery</option>
+                      <option value="Meeting">Client Meeting</option>
+                    </select>
+                  </div>
+
+                  {/* Row 3 */}
+                  <div className="col-span-1">
+                    <label className={labelClass}>Clearance Up To</label>
+                    <select disabled={!!selectedMeetingId} name="upTo" value={formData.upTo} onChange={handleInputChange} className={inputClass}>
+                      <option value="Office">Office block</option>
+                      <option value="Plant">Plant floor</option>
+                      <option value="Control Room">Control Room</option>
+                      <option value="Warehouse">Warehouse</option>
+                      <option value="Laboratory">Laboratory</option>
+                    </select>
+                  </div>
+                  <div className="col-span-1">
+                    <label className={labelClass}>Category</label>
+                    <select disabled={!!selectedMeetingId} name="category" value={formData.category} onChange={handleInputChange} className={inputClass}>
+                      <option value="Visitor">Visitor</option>
+                      <option value="Guest">Guest VIP</option>
+                      <option value="Contractor">Contractor Crew</option>
+                      <option value="Auditor">Auditor</option>
+                      <option value="Delivery">Delivery</option>
+                      <option value="Intern">Intern</option>
+                    </select>
+                  </div>
+                  <div className="col-span-1">
+                    <label className={labelClass}>Arrival (IST)</label>
+                    <input disabled={!!selectedMeetingId} required type="datetime-local" name="arrivalDate" value={formData.arrivalDate} onChange={handleInputChange} className={inputClass} />
+                  </div>
+                  <div className="col-span-1">
+                    <label className={labelClass}>Valid Up To (IST)</label>
+                    <input disabled={!!selectedMeetingId} required type="datetime-local" name="validUpTo" value={formData.validUpTo} onChange={handleInputChange} className={inputClass} />
+                  </div>
+
+                  {/* Row 4 */}
+                  <div className="col-span-1">
+                    <label className={labelClass}>HOD Co-Sign?</label>
+                    <select disabled={!!selectedMeetingId} name="isHodApprovalRequired" value={formData.isHodApprovalRequired} onChange={handleInputChange} className={inputClass}>
+                      <option value="NO">NO</option>
+                      <option value="YES">YES</option>
+                    </select>
+                  </div>
+                  <div className="col-span-1">
+                    <label className={labelClass}>Accompanied By</label>
+                    <select disabled={!!selectedMeetingId} name="accompaniedByCount" value={formData.accompaniedByCount} onChange={handleInputChange} className={inputClass}>
+                      {[0,1,2,3,4].map(n => <option key={n} value={n}>{n} Guests</option>)}
+                    </select>
+                  </div>
+                  <div className="col-span-1">
+                    <label className={labelClass}>Token No (Optional)</label>
+                    <input disabled={!!selectedMeetingId} type="text" name="mobileTokenNo" value={formData.mobileTokenNo} onChange={handleInputChange} className={inputClass} placeholder="Optional" />
+                  </div>
+                  <div className="col-span-1 flex flex-col justify-end">
+                    <div className="w-full h-11 border border-dashed border-slate-300 rounded-xl bg-slate-50/50 flex items-center justify-center">
+                      <span className="text-[10px] font-mono font-bold text-slate-400">ID: {formData.cardId}</span>
+                    </div>
+                  </div>
+
+                  {/* Row 5: Text areas */}
+                  <div className="col-span-2 mt-1">
+                    <label className={labelClass}>Full Address</label>
+                    <textarea disabled={!!selectedMeetingId} required name="address" value={formData.address} onChange={handleInputChange} className={textAreaClass} placeholder="Enter complete residential or office address" />
+                  </div>
+                  <div className="col-span-2 mt-1">
+                    <label className={labelClass}>Declared Assets (Laptops, Tools)</label>
+                    <textarea disabled={!!selectedMeetingId} name="accessories" value={formData.accessories} onChange={handleInputChange} className={textAreaClass} placeholder="List any electronics or equipment" />
+                  </div>
+
+                </div>
+              </form>
+
+              {/* RIGHT COLUMN: IDENTITY & SUBMIT */}
+              <div className="w-full md:w-[30%] bg-slate-50/80 border-l border-slate-200 p-6 flex flex-col h-full justify-between shrink-0">
+                
+                {/* Photo Capture Section */}
+                <div className="flex flex-col items-center">
+                  <div className="flex items-center gap-2 w-full mb-3 pb-3 border-b border-slate-200">
+                    <Camera className="w-4 h-4 text-[#2563EB]" />
+                    <span className="text-sm font-extrabold text-slate-800">Identity Scan</span>
+                  </div>
+                  
+                  <div className="w-full max-h-[180px] aspect-video bg-[#0F172A] rounded-2xl overflow-hidden border-[3px] border-white shadow-xl relative flex items-center justify-center group">
+                    {useWebcam ? (
+                      <Webcam audio={false} ref={webcamRef} screenshotFormat="image/jpeg" className="w-full h-full object-cover" />
+                    ) : capturedPhoto ? (
+                      <img src={capturedPhoto} alt="Captured" className="w-full h-full object-cover" />
+                    ) : (
+                      <div className="text-slate-500 flex flex-col items-center gap-2">
+                        <Camera className="w-8 h-8 opacity-40 group-hover:scale-110 transition-transform" />
+                        <span className="text-[10px] font-mono tracking-widest font-bold opacity-60">CAMERA OFFLINE</span>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="flex w-full gap-2 mt-4">
+                    {useWebcam ? (
+                      <button type="button" onClick={captureWebcamPhoto} className="flex-1 py-2.5 bg-[#2563EB] hover:bg-blue-600 text-white rounded-xl text-[11px] font-black tracking-wide transition shadow-md shadow-blue-500/20 flex justify-center items-center gap-2 cursor-pointer">
+                        SNAP PHOTO
+                      </button>
+                    ) : (
+                      <button type="button" onClick={() => setUseWebcam(true)} className="flex-1 py-2.5 bg-[#0F172A] hover:bg-slate-800 text-white rounded-xl text-[11px] font-black tracking-wide transition shadow-md shadow-slate-900/20 flex justify-center items-center gap-2 cursor-pointer">
+                        START CAM
+                      </button>
+                    )}
+                    <button type="button" onClick={() => document.getElementById("profile-uploader")?.click()} className="flex-1 py-2.5 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 rounded-xl text-[11px] font-bold transition flex justify-center items-center shadow-sm cursor-pointer">
+                      UPLOAD
+                    </button>
+                    <input id="profile-uploader" type="file" accept="image/*" className="hidden" onChange={handlePhotoUpload} />
+                  </div>
+                </div>
+
+                {/* Safety & Submission */}
+                <div className="mt-4 pt-4 border-t border-slate-200">
+                  <div className="bg-amber-50 border border-amber-200/60 rounded-xl p-3 mb-4 shadow-sm">
+                    <div className="flex items-start gap-2">
+                      <div className="w-5 h-5 rounded-full bg-amber-100 flex items-center justify-center shrink-0 mt-0.5">
+                        <AlertCircle className="w-3 h-3 text-amber-600" />
+                      </div>
+                      <div>
+                        <p className="text-[10px] font-black text-amber-900 uppercase tracking-wide mb-0.5">Safety Declaration</p>
+                        <p className="text-[11px] text-amber-800/80 leading-snug mb-2 font-semibold">
+                          I declare no hazardous items. I agree to wear required PPE and display my pass visibly at all times.
+                        </p>
+                        <label className="flex items-center gap-2 cursor-pointer group">
+                          <div className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${isSafetyChecked ? 'bg-[#2563EB] border-[#2563EB]' : 'bg-white border-slate-300 group-hover:border-[#2563EB]'}`}>
+                            {isSafetyChecked && <CheckCircle2 className="w-3 h-3 text-white" />}
+                          </div>
+                          <input type="checkbox" className="hidden" checked={isSafetyChecked} onChange={(e) => setIsSafetyChecked(e.target.checked)} />
+                          <span className="text-[11px] font-extrabold text-[#0F172A] uppercase tracking-wide">I Agree & Accept</span>
+                        </label>
+                      </div>
+                    </div>
+                  </div>
+
+                  <button
+                    type="submit"
+                    form="visitor-form"
+                    disabled={isLoading}
+                    className="w-full h-12 bg-[#2563EB] hover:bg-blue-600 disabled:bg-slate-400 text-white rounded-xl text-sm font-black tracking-widest flex items-center justify-center gap-2 transition-all shadow-md shadow-blue-500/20 cursor-pointer"
+                  >
+                    {isLoading ? "PROCESSING..." : <><Send className="w-4 h-4" /> GENERATE PASS</>}
+                  </button>
+                </div>
               </div>
 
             </motion.div>
@@ -1546,7 +1275,6 @@ export default function VisitorPortal() {
 
         </AnimatePresence>
       </main>
-
     </div>
   );
 }

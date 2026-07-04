@@ -1,14 +1,19 @@
-import random
-from datetime import datetime, timedelta
+import os
+from dotenv import load_dotenv
+load_dotenv()
 
 from app.database.session import SessionLocal
 from app.models.user import User
 from app.models.department import Department
-from app.models.visitor import Visitor
-from app.models.visit import Visit, PassType
 from app.security.password import hash_password
 
 db = SessionLocal()
+
+# Load credentials from environment variables
+ultimate_email = os.getenv("ULTIMATE_ADMIN_EMAIL", "ultimate@igl.com")
+ultimate_password = os.getenv("ULTIMATE_ADMIN_PASSWORD", "12345")
+guard_email = os.getenv("SECURITY_GUARD_EMAIL", "security.guard@igl.com")
+guard_password = os.getenv("SECURITY_GUARD_PASSWORD", "12345")
 
 # 1. Create Departments
 dept_data = [
@@ -39,35 +44,40 @@ for d in dept_data:
 
 # 2. Create Users
 users_data = [
-    {"email": "ultimate@igl.com", "name": "Ultimate System Admin", "role": "CORPORATE_SUPER_ADMIN", "dept": "IT"},
-    {"email": "security.guard@igl.com", "name": "Security Guard 1", "role": "CORPORATE_SUPER_ADMIN", "dept": "SEC"},
+    {
+        "email": ultimate_email,
+        "name": "Ultimate System Admin",
+        "role": "CORPORATE_SUPER_ADMIN",
+        "dept": "IT",
+        "password": ultimate_password
+    },
+    {
+        "email": guard_email,
+        "name": "Security Guard 1",
+        "role": "CORPORATE_SUPER_ADMIN",
+        "dept": "SEC",
+        "password": guard_password
+    },
 ]
-
-# Keep only seeded users
-kept_emails = [u["email"] for u in users_data]
-all_users = db.query(User).all()
-for user in all_users:
-    if user.email not in kept_emails:
-        # Clear references in departments
-        db.query(Department).filter(Department.head_user_id == user.id).update({Department.head_user_id: None})
-        # Clear manager references
-        db.query(User).filter(User.reporting_manager_id == user.id).update({User.reporting_manager_id: None})
-        # Delete user
-        db.delete(user)
-db.commit()
 
 for u in users_data:
     user = db.query(User).filter(User.email == u["email"]).first()
     if not user:
         user = User(
             email=u["email"],
+            employee_id=u["email"],
             full_name=u["name"],
-            hashed_password=hash_password("password123"),
+            hashed_password=hash_password(u["password"]),
             role=u["role"],
             department_id=departments[u["dept"]].id,
             is_active=True
         )
         db.add(user)
+    else:
+        user.hashed_password = hash_password(u["password"])
+        user.employee_id = u["email"]
+        user.role = u["role"]
+        user.department_id = departments[u["dept"]].id
 db.commit()
 
 db.close()

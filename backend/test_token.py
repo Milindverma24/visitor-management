@@ -1,5 +1,0 @@
-from app.security.auth import verify_token
-
-token = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJtaWxpbmQxQGV4YW1wbGUuY29tIiwicm9sZSI6ImVtcGxveWVlIiwiZXhwIjoxNzgwMjI2ODg3fQ.NJ_GlGG4WLq11NKuOMnk5DfHn1tOr3hPTXgY-SeZMqA"
-
-print(verify_token(token))

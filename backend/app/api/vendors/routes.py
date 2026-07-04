@@ -4,6 +4,7 @@ from typing import Optional
 from pydantic import BaseModel
 from app.database.session import get_db
 from app.models.vendor import Vendor
+from app.security.dependencies import get_current_user
 
 router = APIRouter()
 
@@ -30,8 +31,17 @@ class VendorUpdate(BaseModel):
     blacklist_reason: Optional[str] = None
 
 @router.get("/")
-def get_vendors(search: Optional[str] = None, skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
+def get_vendors(
+    search: Optional[str] = None, 
+    skip: int = 0, 
+    limit: int = 100, 
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
+):
     query = db.query(Vendor)
+    if current_user.get("role") != "CORPORATE_SUPER_ADMIN":
+        query = query.filter(Vendor.plant_id == current_user.get("plant_id"))
+        
     if search:
         query = query.filter(Vendor.vendor_name.ilike(f"%{search}%"))
     return query.offset(skip).limit(limit).all()
@@ -44,8 +54,15 @@ def get_vendor(vendor_id: int, db: Session = Depends(get_db)):
     return v
 
 @router.post("/")
-def create_vendor(vendor: VendorCreate, db: Session = Depends(get_db)):
+def create_vendor(
+    vendor: VendorCreate, 
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
+):
     new_v = Vendor(**vendor.dict())
+    if current_user.get("role") != "CORPORATE_SUPER_ADMIN":
+        new_v.plant_id = current_user.get("plant_id")
+        
     db.add(new_v)
     db.commit()
     db.refresh(new_v)

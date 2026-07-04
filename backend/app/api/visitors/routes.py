@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, Request, UploadFile, File, BackgroundTas
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 
-from app.database.session import SessionLocal
+from app.database.session import SessionLocal, get_db
 from app.security.dependencies import get_current_user
 from app.models.visitor import Visitor
 from app.schemas.visitor import VisitorCreate
@@ -16,7 +16,6 @@ from app.utils.badge_generator import generate_badge
 from app.utils.email_service import send_email
 from app.utils.email_templates import render_approval_email, render_checkin_email, render_checkout_email
 from app.utils.whatsapp_service import send_whatsapp
-from app.services import telegram_service
 from app.utils.timezone import to_ist, get_ist_now
 from app.api.websockets import sync_broadcast
 
@@ -36,25 +35,14 @@ router = APIRouter(
 async def upload_photo(
     file: UploadFile = File(...)
 ):
-
-
-
-    file_path = os.path.join(
-        "uploads",
-        "visitor_photos",
-        file.filename
-    )
-
-    with open(file_path, "wb") as buffer:
-
-        shutil.copyfileobj(
-            file.file,
-            buffer
-        )
-
+    import base64
+    content = await file.read()
+    base64_str = base64.b64encode(content).decode('utf-8')
+    mime_type = file.content_type or "image/jpeg"
+    data_url = f"data:{mime_type};base64,{base64_str}"
     return {
         "success": True,
-        "photo_path": f"/{file_path}"
+        "photo_path": data_url
     }
 
 ##################################################
@@ -65,23 +53,14 @@ async def upload_photo(
 async def upload_document(
     file: UploadFile = File(...)
 ):
-    import time
-    ext = os.path.splitext(file.filename)[1].lower()
-    if ext in [".jpg", ".jpeg", ".png"]:
-        folder = "uploads/photos"
-    else:
-        folder = "uploads/documents"
-        
-    os.makedirs(folder, exist_ok=True)
-    safe_filename = f"{int(time.time())}_{file.filename.replace(' ', '_')}"
-    file_path = os.path.join(folder, safe_filename)
-    
-    with open(file_path, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
-        
+    import base64
+    content = await file.read()
+    base64_str = base64.b64encode(content).decode('utf-8')
+    mime_type = file.content_type or "application/octet-stream"
+    data_url = f"data:{mime_type};base64,{base64_str}"
     return {
         "success": True,
-        "file_path": f"/{file_path}"
+        "file_path": data_url
     }
 ##################################################
 # REGISTER VISITOR
@@ -89,48 +68,48 @@ async def upload_document(
 
 @router.post("/")
 def create_visitor(
-    request: VisitorCreate
+    request: VisitorCreate,
+    db: Session = Depends(get_db)
 ):
-
-    db: Session = SessionLocal()
 
     import base64
     import time
     
     photo_path = None
     if request.photo_base64:
-        try:
-            # Strip data url prefix if present
-            base64_data = request.photo_base64
-            if "," in base64_data:
-                base64_data = base64_data.split(",")[1]
-            
+        photo_path = request.photo_base64
 
-            photo_filename = f"visitor_{int(time.time())}.jpg"
-            photo_path = os.path.join("uploads/photos", photo_filename)
-            
-            with open(photo_path, "wb") as f:
-                f.write(base64.b64decode(base64_data))
-                
-            photo_path = f"/{photo_path}" # Add leading slash for frontend
-        except Exception as e:
-            print(f"Failed to save photo: {e}")
+    existing_visitor = db.query(Visitor).filter(Visitor.phone_number == request.phone_number).first()
 
-    visitor = Visitor(
-        full_name=request.full_name,
-        phone_number=request.phone_number,
-        email=request.email,
-        company=request.company,
-        purpose=request.purpose,
-        id_type=request.id_type,
-        id_number=request.id_number,
-        title=request.title,
-        address=request.address,
-        category=request.category,
-        photo_path=photo_path
-    )
+    if existing_visitor:
+        existing_visitor.full_name = request.full_name
+        existing_visitor.email = request.email
+        existing_visitor.company = request.company
+        existing_visitor.purpose = request.purpose
+        existing_visitor.id_type = request.id_type
+        existing_visitor.id_number = request.id_number
+        existing_visitor.title = request.title
+        existing_visitor.address = request.address
+        existing_visitor.category = request.category
+        if photo_path:
+            existing_visitor.photo_path = photo_path
+        visitor = existing_visitor
+    else:
+        visitor = Visitor(
+            full_name=request.full_name,
+            phone_number=request.phone_number,
+            email=request.email,
+            company=request.company,
+            purpose=request.purpose,
+            id_type=request.id_type,
+            id_number=request.id_number,
+            title=request.title,
+            address=request.address,
+            category=request.category,
+            photo_path=photo_path
+        )
+        db.add(visitor)
 
-    db.add(visitor)
     db.commit()
     db.refresh(visitor)
 
@@ -146,15 +125,18 @@ def create_visitor(
 ##################################################
 
 @router.get("/")
-def get_visitors():
-
-    db: Session = SessionLocal()
-
-    visitors = db.query(
-        Visitor
-    ).all()
-
-    return visitors
+def get_visitors(
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
+):
+    query = db.query(Visitor)
+    
+    if current_user.get("role") != "CORPORATE_SUPER_ADMIN":
+        plant_id = current_user.get("plant_id")
+        # Join with Visit to only show visitors who have visited this plant
+        query = query.join(Visit).filter(Visit.plant_id == plant_id)
+        
+    return query.distinct().all()
 
 ##################################################
 # SEARCH VISITOR BY PHONE NUMBER
@@ -176,8 +158,14 @@ def search_visitor(phone_number: str):
             "message": "Visitor Not Found"
         }
 
+    # Count how many times they have visited
+    visit_count = db.query(Visit).filter(
+        Visit.visitor_id == visitor.id
+    ).count()
+
     return {
         "success": True,
+        "visit_count": visit_count,
         "visitor": {
             "id": visitor.id,
             "full_name": visitor.full_name,
@@ -186,8 +174,180 @@ def search_visitor(phone_number: str):
             "company": visitor.company,
             "purpose": visitor.purpose,
             "id_type": visitor.id_type,
-            "id_number": visitor.id_number
+            "id_number": visitor.id_number,
+            "address": visitor.address,
+            "title": visitor.title,
+            "category": visitor.category,
+            "photo_path": visitor.photo_path
         }
+    }
+
+from pydantic import BaseModel
+from typing import Optional
+
+class PreRegisteredCompleteRequest(BaseModel):
+    visitor_id: int
+    full_name: str
+    phone_number: str
+    email: Optional[str] = None
+    address: Optional[str] = None
+    title: Optional[str] = None
+    category: Optional[str] = None
+    photo_base64: Optional[str] = None
+    
+    accessories: Optional[str] = None
+    accompanied_by_count: Optional[int] = 0
+    up_to: Optional[str] = None
+    mobile_token_no: Optional[str] = None
+
+@router.get("/pre-registered/{phone_number}")
+def get_pre_registered_visits(phone_number: str):
+    db: Session = SessionLocal()
+    
+    # Clean phone number (strip spaces/dashes)
+    clean_phone = phone_number.strip().replace(" ", "").replace("-", "")
+    
+    # Search for all visitors with this phone number
+    visitors = db.query(Visitor).filter(
+        (Visitor.phone_number == clean_phone) |
+        (Visitor.phone_number == phone_number) |
+        (Visitor.phone_number.like(f"%{clean_phone}%"))
+    ).all()
+    
+    if not visitors:
+        return []
+        
+    visitor_ids = [v.id for v in visitors]
+    current_time = datetime.utcnow()
+    
+    # Get all visits for these visitors ordered by newest first
+    all_visits = db.query(Visit).filter(
+        Visit.visitor_id.in_(visitor_ids)
+    ).order_by(Visit.created_at.desc()).all()
+    
+    # 1. Employee-created visits (active only: PENDING or APPROVED, not checked in yet)
+    employee_visits = [v for v in all_visits if v.created_by_employee is True and v.check_in_time is None and v.status in ["APPROVED", "PENDING"]]
+    
+    active_employee_visits = []
+    for visit in employee_visits:
+        # Check if valid_up_to has passed and dynamically skip if expired
+        if visit.status == "APPROVED" and visit.valid_up_to and current_time > visit.valid_up_to:
+            visit.status = "EXPIRED"
+            db.commit()
+            continue
+        active_employee_visits.append(visit)
+        
+    # 2. Self-created visits
+    self_visits = [v for v in all_visits if not v.created_by_employee]
+    
+    # Combine active employee visits and the single last self-created visit
+    selected_visits = []
+    selected_visits.extend(active_employee_visits)
+    
+    if self_visits:
+        selected_visits.append(self_visits[0])
+        
+    result = []
+    for visit in selected_visits:
+        visitor = next((v for v in visitors if v.id == visit.visitor_id), None)
+        dept_name = visit.department.name if visit.department else "Unknown"
+        
+        result.append({
+            "visit_id": visit.id,
+            "visitor_id": visit.visitor_id,
+            "visitor_name": visitor.full_name if visitor else "Unknown",
+            "visitor_phone": visitor.phone_number if visitor else phone_number,
+            "visitor_email": visitor.email if visitor else "",
+            "visitor_company": visitor.company if visitor else "",
+            "visitor_address": visitor.address if visitor else "",
+            "title": visitor.title if (visitor and visitor.title) else "Mr.",
+            "card_id": visit.card_id,
+            "status": visit.status,
+            "host_employee": visit.host_employee,
+            "purpose": visit.purpose,
+            "arrival_date": visit.arrival_date.isoformat() if visit.arrival_date else None,
+            "valid_up_to": visit.valid_up_to.isoformat() if visit.valid_up_to else None,
+            "department_name": dept_name,
+            "up_to": visit.up_to,
+            "accompanied_by_count": visit.accompanied_by_count,
+            "accessories": visit.accessories,
+            "mobile_token_no": visit.mobile_token_no,
+            "created_by_employee": visit.created_by_employee,
+            "category": visit.pass_type.value if hasattr(visit.pass_type, "value") else str(visit.pass_type)
+        })
+        
+    return result
+
+@router.put("/pre-registered/{visit_id}/complete")
+def complete_pre_registered_visit(
+    visit_id: int,
+    request: PreRegisteredCompleteRequest,
+    db: Session = Depends(get_db)
+):
+    visit = db.query(Visit).filter(Visit.id == visit_id).first()
+    if not visit:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="Visit Not Found")
+        
+    visitor = db.query(Visitor).filter(Visitor.id == request.visitor_id).first()
+    if not visitor:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="Visitor Not Found")
+        
+    # Update visitor photo if provided
+    import base64
+    import time
+    
+    photo_path = visitor.photo_path
+    if request.photo_base64:
+        try:
+            base64_data = request.photo_base64
+            if "," in base64_data:
+                base64_data = base64_data.split(",")[1]
+            
+            photo_filename = f"visitor_{int(time.time())}.jpg"
+            photo_path = os.path.join("uploads/photos", photo_filename)
+            
+            with open(photo_path, "wb") as f:
+                f.write(base64.b64decode(base64_data))
+                
+            photo_path = f"/{photo_path}"
+        except Exception as e:
+            print(f"Failed to save photo: {e}")
+            
+    # Update visitor details
+    visitor.full_name = request.full_name
+    visitor.email = request.email
+    visitor.address = request.address
+    if request.title:
+        visitor.title = request.title
+    if request.category:
+        visitor.category = request.category
+    visitor.photo_path = photo_path
+    
+    # Update visit details
+    if request.accessories is not None:
+        visit.accessories = request.accessories
+    if request.accompanied_by_count is not None:
+        visit.accompanied_by_count = request.accompanied_by_count
+    if request.up_to is not None:
+        visit.up_to = request.up_to
+    if request.mobile_token_no is not None:
+        visit.mobile_token_no = request.mobile_token_no
+        
+    if not visit.card_id:
+        visit.card_id = f"VM/{visit.id:06d}"
+        
+    db.commit()
+    db.refresh(visit)
+    db.refresh(visitor)
+    
+    return {
+        "success": True,
+        "visit_id": visit.id,
+        "card_id": visit.card_id,
+        "status": visit.status,
+        "message": "Pre-registered visit completed successfully"
     }
 
 @router.get("/status/{phone_number}")
@@ -244,10 +404,10 @@ def get_visitor_status(phone_number: str):
 @router.post("/visit")
 def create_visit(
     request: VisitCreate,
-    background_tasks: BackgroundTasks
+    background_tasks: BackgroundTasks,
+    http_request: Request,
+    db: Session = Depends(get_db)
 ):
-
-    db: Session = SessionLocal()
 
     visitor = db.query(Visitor).filter(
         Visitor.id == request.visitor_id
@@ -260,11 +420,6 @@ def create_visit(
             "message": "Visitor Not Found"
         }
     if visitor.is_blacklisted:
-        
-        # Telegram Blacklist Alert
-        blacklist_msg = f"🚨 <b>SECURITY ALERT</b>\n\n<b>BLACKLISTED VISITOR DETECTED</b>\n\nVisitor: {visitor.full_name}\nPhone: {visitor.phone_number}\nDepartment: {request.department}\nTime: {get_ist_now().strftime('%Y-%m-%d %H:%M:%S')}\n\nSecurity Verification Required"
-        background_tasks.add_task(bg_blacklist_alert, blacklist_msg, visitor.id)
-
         return {
             "success": False,
             "message": "Visitor is Blacklisted"
@@ -273,6 +428,19 @@ def create_visit(
     dept = None
     if request.department:
         dept = db.query(Department).filter(Department.name == request.department).first()
+
+    # Determine if this was created by an employee
+    created_by_employee = False
+    auth_header = http_request.headers.get("Authorization")
+    if auth_header and auth_header.startswith("Bearer "):
+        try:
+            from app.security.auth import verify_token
+            token = auth_header.split(" ")[1]
+            payload = verify_token(token)
+            if payload:
+                created_by_employee = True
+        except Exception as e:
+            print("Token verification failed in create_visit:", e)
 
     visit = Visit(
         visitor_id=request.visitor_id,
@@ -287,60 +455,73 @@ def create_visit(
         accessories=request.accessories,
         valid_up_to=request.valid_up_to,
         accompanied_by_count=request.accompanied_by_count,
-        pass_type=request.pass_type or "VISITOR_PASS"
+        pass_type=request.pass_type or ("INTERVIEW_PASS" if request.purpose == "Interview" else "VISITOR_PASS"),
+        created_by_employee=created_by_employee,
+        plant_id=payload.get("plant_id") if created_by_employee and payload and payload.get("role") != "CORPORATE_SUPER_ADMIN" else request.plant_id
     )
 
     db.add(visit)
     db.commit()
     db.refresh(visit)
     
-    # Generate simple Card ID based on visit ID
-    if visit.pass_type == "VENDOR_PASS":
-        visit.card_id = f"TRP/{visit.id:06d}"
-    else:
-        visit.card_id = f"VM/{visit.id:06d}"
+    # Generate Location-Specific Visitor ID
+    plant_prefix = "IGL"
+    if visit.plant_id:
+        from app.models.plant import Plant
+        plant_obj = db.query(Plant).filter(Plant.id == visit.plant_id).first()
+        if plant_obj and plant_obj.plant_code:
+            code = plant_obj.plant_code.upper()
+            if code in ["KP", "KSP"]:
+                plant_prefix = "KASP"
+            else:
+                plant_prefix = code
+
+    visit.card_id = f"{plant_prefix}-{visit.id:06d}"
     db.commit()
     db.refresh(visit)
     
-    # Telegram Photo Notification (if visitor has a photo)
-    if visitor.photo_path:
-        local_photo_path = visitor.photo_path.lstrip("/")
-        background_tasks.add_task(
-            bg_visitor_photo,
-            department=request.department or "Unknown",
-            photo_path=local_photo_path,
-            name=visitor.full_name,
-            purpose=visit.purpose,
-            target_id=visit.id
-        )
-        
-    def bg_visit_request_alert(visitor_name, host_employee, purpose, dept_name, visit_id):
-        from app.database.session import SessionLocal
-        from app.services import telegram_service
-        from app.utils.timezone import get_ist_now
-        db_session = SessionLocal()
-        try:
-            alert_msg = f"⏳ <b>NEW PASS REQUEST PENDING</b>\n\nVisitor: {visitor_name}\nDepartment: {dept_name}\nHost: {host_employee}\nPurpose: {purpose}\nTime: {get_ist_now().strftime('%Y-%m-%d %H:%M:%S')}\n\n<i>Please review and approve in the Admin Dashboard.</i>"
-            telegram_service.send_admin_notification(db_session, alert_msg, visit_id)
-            if dept_name != "Unknown":
-                telegram_service.send_department_notification(db_session, dept_name, alert_msg, visit_id)
-        finally:
-            db_session.close()
-
-    background_tasks.add_task(
-        bg_visit_request_alert,
-        visitor_name=visitor.full_name,
-        host_employee=request.host_employee,
-        purpose=visit.purpose,
-        dept_name=request.department or "Unknown",
-        visit_id=visit.id
-    )
-
     sync_broadcast("NEW_VISIT", {
         "visit_id": visit.id,
         "visitor_name": visitor.full_name,
         "department": request.department or "Unknown"
     })
+
+    from app.models.user import User
+    # Find employee's email. Handle formatting from frontend like "Name (ROLE, Dept)"
+    clean_host_name = visit.host_employee.split(" (")[0]
+    host_user = db.query(User).filter(User.full_name == clean_host_name).first()
+    if not host_user:
+        host_user = db.query(User).filter(User.email == clean_host_name).first()
+    if not host_user:
+        host_user = db.query(User).filter(User.employee_id == clean_host_name).first()
+    
+    if host_user and host_user.email:
+        from app.core.config import settings
+        if settings.BACKEND_URL:
+            base_url = settings.BACKEND_URL.rstrip("/")
+        else:
+            import socket
+            try:
+                s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+                s.connect(("8.8.8.8", 80))
+                local_ip = s.getsockname()[0]
+                s.close()
+                base_url = f"http://{local_ip}:8001"
+            except Exception:
+                base_url = str(http_request.base_url).rstrip("/")
+        background_tasks.add_task(
+            bg_send_approval_request,
+            visit_id=visit.id,
+            host_email=host_user.email,
+            host_name=host_user.full_name,
+            visitor_name=visitor.full_name,
+            mobile_number=visitor.phone_number,
+            organization=visitor.company or "N/A",
+            purpose=visit.purpose,
+            visit_date=visit.arrival_date.isoformat() if visit.arrival_date else "N/A",
+            department=request.department or "Unknown",
+            base_url=base_url
+        )
 
     return {
         "success": True,
@@ -374,16 +555,22 @@ def expire_visit(
 ##################################################
 
 @router.get("/visits")
-def get_all_visits(user: dict = Depends(get_current_user)):
-
-    db: Session = SessionLocal()
+def get_all_visits(
+    user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
 
     query = db.query(Visit)
 
     role = user.get("role", "EMPLOYEE")
+    plant_id = user.get("plant_id")
+
+    # Filter by plant for everyone except SUPER_ADMIN
+    if role != "CORPORATE_SUPER_ADMIN":
+        query = query.filter(Visit.plant_id == plant_id)
 
     if role in ["CORPORATE_SUPER_ADMIN", "PLANT_ADMIN"]:
-        # Full visibility — no filter
+        # Full visibility within their scope
         pass
     elif role in ["DEPARTMENT_HEAD", "DEPARTMENT_EXECUTIVE"]:
         # Own department's visits only
@@ -402,8 +589,14 @@ def get_all_visits(user: dict = Depends(get_current_user)):
             )
         )
     elif role == "HR_MANAGER":
-        # HR sees interview passes only
-        query = query.filter(Visit.pass_type == "INTERVIEW_PASS")
+        # HR sees interview passes globally OR any passes where they are the host
+        from sqlalchemy import or_
+        query = query.filter(
+            or_(
+                Visit.pass_type == "INTERVIEW_PASS",
+                Visit.host_employee == user.get("sub")
+            )
+        )
     elif role == "RECEPTIONIST":
         # Receptionist sees all pending and today's
         from sqlalchemy import or_
@@ -415,16 +608,21 @@ def get_all_visits(user: dict = Depends(get_current_user)):
             )
         )
     else:
-        # EMPLOYEE sees only their own hosted visitors
-        query = query.filter(Visit.host_employee == user.get("sub"))
+        # EMPLOYEE sees all visits in their plant so they can approve any
+        pass
 
     visits = query.all()
 
     # Dynamically update status to EXPIRED if valid_up_to has passed and not checked in
     current_time = datetime.utcnow()
+    expired_any = False
     for v in visits:
         if v.status == "APPROVED" and v.check_in_time is None and v.valid_up_to and current_time > v.valid_up_to:
             v.status = "EXPIRED"
+            expired_any = True
+
+    if expired_any:
+        db.commit()
 
     return visits
 
@@ -444,9 +642,7 @@ def approve_visit(
     Approves a visitor pass request.
 
     IGLGATE v3.0 Approval Chain:
-    - Approver: DEPARTMENT_HEAD (scoped to host dept) | PLANT_ADMIN | CORPORATE_SUPER_ADMIN
-    - EMPLOYEE and RECEPTIONIST cannot approve.
-    - Department Head can only approve visits for their own department.
+    - Approver: EVERYONE (EMPLOYEE, DEPARTMENT_HEAD, PLANT_ADMIN, CORPORATE_SUPER_ADMIN)
     """
     from app.security.rbac import can_approve_visit
 
@@ -467,7 +663,7 @@ def approve_visit(
     if not can_approve_visit(user, visit, db):
         return {
             "success": False,
-            "message": "Access Denied: You do not have authority to approve this visit. Only the Department Head of the host department, Plant Admin, or Corporate Super Admin can approve."
+            "message": "Access Denied: You do not have authority to approve this visit."
         }
 
     visit.status = "APPROVED"
@@ -817,30 +1013,6 @@ def blacklist_visitor(visitor_id: int):
 # BACKGROUND TASK RUNNERS FOR NON-BLOCKING ALERTS
 # ---------------------------------------------------------
 
-def bg_blacklist_alert(blacklist_msg, visitor_id):
-    from app.database.session import SessionLocal
-    db = SessionLocal()
-    try:
-        telegram_service.send_security_notification(db, blacklist_msg, visitor_id)
-        db.commit()
-    except Exception:
-        db.rollback()
-    finally:
-        db.close()
-
-
-def bg_visitor_photo(department, photo_path, name, purpose, target_id):
-    from app.database.session import SessionLocal
-    db = SessionLocal()
-    try:
-        telegram_service.send_visitor_photo(db, department, photo_path, name, purpose, target_id)
-        db.commit()
-    except Exception:
-        db.rollback()
-    finally:
-        db.close()
-
-
 def bg_approval_notifications(visitor_email, visitor_name, visit_date, host_name, badge_path, dept_name, visit_id, card_id):
     from app.database.session import SessionLocal
     db = SessionLocal()
@@ -856,50 +1028,19 @@ def bg_approval_notifications(visitor_email, visitor_name, visit_date, host_name
                     recipient_email=visitor_email,
                     subject="Your Visit is Approved - IGL",
                     body=email_body,
-                    attachment_path=badge_path,
-                    is_html=True
+                    is_html=True,
+                    attachment_base64=badge_path,
+                    attachment_name=f"igl_visitor_pass_{card_id}.pdf"
                 )
-            except Exception:
-                pass
+            except Exception as e:
+                print(f"Failed to email visitor: {e}")
         
         from app.models.visit import Visit
         from app.models.visitor import Visitor
-        from app.models.vehicle import Vehicle
-        import re
         
-        # Check if there is a vehicle associated with this visit (Transporter Pass)
         visit = db.query(Visit).filter(Visit.id == visit_id).first()
-        vehicle_details = ""
-        pass_type_str = "Standard"
-        
-        if visit and visit.pass_type == "VENDOR_PASS":
-            pass_type_str = "Transporter/Vehicle"
-            
-            # Try to extract Vehicle Number from purpose like "[DL 1M 1234] - MATERIAL DELIVERY"
-            match = re.search(r'\[(.*?)\]', visit.purpose)
-            vehicle_number = match.group(1) if match else None
-            
-            if vehicle_number:
-                vehicle = db.query(Vehicle).filter(Vehicle.vehicle_number == vehicle_number).first()
-                if vehicle:
-                    vehicle_details = f"\n🚚 <b>VEHICLE DETAILS</b>\nNumber: {vehicle.vehicle_number}\nType: {vehicle.vehicle_type}\nCompany: {vehicle.transport_company or 'N/A'}"
-        
-        approve_msg = f"✅ <b>VISITOR APPROVED</b>\n\nVisitor Name: {visitor_name}\nDepartment: {dept_name}\nHost Employee: {host_name}\nVisit ID: {visit_id}\nPass Type: {pass_type_str}\nDate: {get_ist_now().strftime('%Y-%m-%d')}\nTime: {get_ist_now().strftime('%H:%M:%S')}{vehicle_details}"
-        
-        telegram_service.send_admin_notification(db, approve_msg, visit_id)
-        telegram_service.send_department_notification(db, dept_name, approve_msg, visit_id)
         
         if badge_path:
-            telegram_service.send_pass_notification(
-                db=db,
-                departments=[dept_name, "SECURITY"],
-                pass_path=badge_path,
-                pass_number=card_id or str(visit_id),
-                name=visitor_name,
-                pass_type=pass_type_str,
-                target_id=visit_id
-            )
-            
             # Email the guard
             from app.core.config import settings
             if settings.EMAIL_USER:
@@ -909,13 +1050,15 @@ def bg_approval_notifications(visitor_email, visitor_name, visit_date, host_name
                         recipient_email=guard_email,
                         subject=f"NEW ENTRY PASS: {visitor_name}",
                         body=email_body,
-                        attachment_path=badge_path,
-                        is_html=True
+                        is_html=True,
+                        attachment_base64=badge_path,
+                        attachment_name=f"igl_visitor_pass_{card_id}.pdf"
                     )
                 except Exception as e:
                     print(f"Failed to email guard: {e}")
         db.commit()
-    except Exception:
+    except Exception as e:
+        print(f"Error in bg_approval_notifications: {e}")
         db.rollback()
     finally:
         db.close()
@@ -934,8 +1077,6 @@ def bg_rejection_notifications(visitor_email, visitor_name, visit_id, host_name,
                 )
             except Exception:
                 pass
-        reject_msg = f"❌ <b>VISITOR REJECTED</b>\n\nVisitor: {visitor_name}\nDepartment: {dept_name}\nReason: {rejection_reason}"
-        telegram_service.send_department_notification(db, dept_name, reject_msg, visit_id)
         db.commit()
     except Exception:
         db.rollback()
@@ -964,9 +1105,6 @@ def bg_checkin_notifications(visitor_name, time_str, host_name, visitor_email, v
         except Exception:
             pass
             
-        checkin_msg = f"🟢 <b>VISITOR CHECKED IN</b>\n\nVisitor: {visitor_name}\nDepartment: {dept_name}\nGate: {gate_number}\nCheck-In Time: {time_str}"
-        telegram_service.send_security_notification(db, checkin_msg, visit_id)
-        telegram_service.send_department_notification(db, dept_name, checkin_msg, visit_id)
         db.commit()
     except Exception:
         db.rollback()
@@ -1001,11 +1139,43 @@ def bg_checkout_notifications(visitor_name, time_str, visitor_email, visitor_pho
             except Exception:
                 pass
                 
-        checkout_msg = f"🔴 <b>VISITOR CHECKED OUT</b>\n\nVisitor: {visitor_name}\nDepartment: {dept_name}\nGate: {gate_number or 'Unknown'}\nCheck-Out Time: {time_str}"
-        telegram_service.send_security_notification(db, checkout_msg, visit_id)
-        telegram_service.send_department_notification(db, dept_name, checkout_msg, visit_id)
         db.commit()
     except Exception:
         db.rollback()
+    finally:
+        db.close()
+
+
+def bg_send_approval_request(visit_id, host_email, host_name, visitor_name, mobile_number, organization, purpose, visit_date, department, base_url):
+    from app.database.session import SessionLocal
+    from app.api.approvals.routes import create_approval_token
+    from app.utils.email_templates import render_approval_request_email
+    from app.utils.email_service import send_email
+    db = SessionLocal()
+    try:
+        token = create_approval_token(visit_id)
+        approve_url = f"{base_url}/api/approve?request_id={visit_id}&token={token}"
+        reject_url = f"{base_url}/api/reject?request_id={visit_id}&token={token}"
+        
+        email_body = render_approval_request_email(
+            employee_name=host_name,
+            visitor_name=visitor_name,
+            mobile_number=mobile_number,
+            organization=organization,
+            purpose=purpose,
+            visit_date=visit_date,
+            department=department,
+            approve_url=approve_url,
+            reject_url=reject_url
+        )
+        
+        send_email(
+            recipient_email=host_email,
+            subject="Visitor Approval Request",
+            body=email_body,
+            is_html=True
+        )
+    except Exception as e:
+        print(f"Failed to send approval request: {e}")
     finally:
         db.close()

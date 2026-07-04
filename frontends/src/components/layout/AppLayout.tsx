@@ -14,7 +14,6 @@ import {
   BarChart3,
   Settings,
   UserCog,
-  Truck,
   ShieldOff,
   TrendingUp,
   Package,
@@ -32,7 +31,6 @@ const mainNavigation = [
   { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
   { name: "Departments", href: "/departments", icon: Building2 },
   { name: "Visitors", href: "/visitors", icon: Users },
-  { name: "Vehicles", href: "/vehicles", icon: Truck },
   { name: "Approvals", href: "/approvals", icon: UserCheck },
 ];
 
@@ -45,12 +43,12 @@ const securityNavigation = [
 
 const managementNavigation = [
   { name: "Analytics", href: "/analytics", icon: TrendingUp, roles: ["CORPORATE_SUPER_ADMIN", "PLANT_ADMIN"] },
+  { name: "Locations", href: "/locations", icon: Building2, roles: ["CORPORATE_SUPER_ADMIN"] },
   { name: "Employees", href: "/employees", icon: UserCog, roles: ["CORPORATE_SUPER_ADMIN", "PLANT_ADMIN"] },
-  { name: "Meetings", href: "/meetings", icon: Users, roles: ["CORPORATE_SUPER_ADMIN", "PLANT_ADMIN", "DEPARTMENT_HEAD", "DEPARTMENT_EXECUTIVE", "HR_MANAGER", "EMPLOYEE", "RECEPTIONIST"] },
-  { name: "Interviews", href: "/interviews", icon: ClipboardList, roles: ["CORPORATE_SUPER_ADMIN", "PLANT_ADMIN", "HR_MANAGER", "HR_EXECUTIVE"] },
+
   { name: "Reports", href: "/reports", icon: BarChart3, roles: ["CORPORATE_SUPER_ADMIN", "PLANT_ADMIN", "DEPARTMENT_HEAD"] },
   { name: "Audit Logs", href: "/audit", icon: FileText, roles: ["CORPORATE_SUPER_ADMIN", "PLANT_ADMIN"] },
-  { name: "Notifications", href: "/notifications", icon: Bell, roles: ["CORPORATE_SUPER_ADMIN", "PLANT_ADMIN"] },
+
 ];
 
 const allNavigation = [...mainNavigation, ...securityNavigation, ...managementNavigation];
@@ -333,7 +331,12 @@ export const AppLayout = () => {
                 )}
                 <div className="flex flex-col text-left hidden sm:flex">
                   <span className="text-xs font-bold text-slate-800 leading-none">{userProfile?.full_name || "User"}</span>
-                  <span className="text-[10px] text-slate-500 font-medium leading-tight mt-0.5">{roleLabel[userRole] || userRole}</span>
+                  <span className="text-[10px] text-slate-500 font-medium leading-tight mt-0.5">
+                    {roleLabel[userRole] || userRole}
+                    <span className="text-blue-600 font-bold ml-1">
+                      • {userProfile?.plant ? userProfile.plant.plant_name : "Global"}
+                    </span>
+                  </span>
                 </div>
               </div>
               <button

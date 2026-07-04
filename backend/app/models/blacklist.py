@@ -2,14 +2,16 @@
 # BLACKLIST MODEL
 ##################################################
 from sqlalchemy import Column, Integer, String, Boolean, DateTime, Text, ForeignKey, Enum as SAEnum
+from sqlalchemy.orm import relationship
 from datetime import datetime
 import enum
 from app.database.database import Base
+from app.models.plant import Plant
 
 
 class BlacklistType(str, enum.Enum):
     VISITOR = "VISITOR"
-    VEHICLE = "VEHICLE"
+
     COMPANY = "COMPANY"
     CONTRACTOR = "CONTRACTOR"
     VENDOR = "VENDOR"
@@ -20,6 +22,13 @@ class Blacklist(Base):
     __tablename__ = "blacklist"
 
     id = Column(Integer, primary_key=True, index=True)
+
+    plant_id = Column(
+        Integer,
+        ForeignKey("plants.id"),
+        nullable=True
+    )
+    plant = relationship("Plant")
 
     # Type and Reference
     blacklist_type = Column(SAEnum(BlacklistType), nullable=False)

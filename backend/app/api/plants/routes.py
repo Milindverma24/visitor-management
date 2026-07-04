@@ -47,6 +47,18 @@ def get_plants(
 
 
 ##################################################
+# GET PUBLIC PLANTS
+##################################################
+
+@router.get("/public", response_model=List[PlantResponse])
+def get_public_plants(db: Session = Depends(get_db)):
+    """
+    Returns all active plants for public registration kiosk.
+    No authentication required.
+    """
+    return db.query(Plant).filter(Plant.is_active == True).all()
+
+##################################################
 # GET SINGLE PLANT
 ##################################################
 

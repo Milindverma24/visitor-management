@@ -6,6 +6,7 @@ from sqlalchemy.orm import relationship
 from datetime import datetime
 import enum
 from app.database.database import Base
+from app.models.plant import Plant
 
 
 class MaterialType(str, enum.Enum):
@@ -20,6 +21,13 @@ class Material(Base):
 
     id = Column(Integer, primary_key=True, index=True)
 
+    plant_id = Column(
+        Integer,
+        ForeignKey("plants.id"),
+        nullable=True
+    )
+    plant = relationship("Plant")
+
     # Gate Pass Number
     gate_pass_number = Column(String(100), nullable=True, index=True)
 
@@ -33,7 +41,7 @@ class Material(Base):
     # Vendor/Supplier
     vendor_name = Column(String(255), nullable=True)
     vendor_id = Column(Integer, ForeignKey("vendors.id"), nullable=True)
-    vehicle_number = Column(String(50), nullable=True)
+
     driver_name = Column(String(255), nullable=True)
 
     # Department

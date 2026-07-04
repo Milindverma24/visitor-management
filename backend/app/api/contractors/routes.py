@@ -4,6 +4,7 @@ from typing import Optional, List
 from pydantic import BaseModel
 from app.database.session import get_db
 from app.models.contractor import Contractor, ContractorEmployee
+from app.security.dependencies import get_current_user
 
 router = APIRouter()
 
@@ -22,7 +23,6 @@ class ContractorEmployeeCreate(BaseModel):
     contractor_id: int
     full_name: str
     phone_number: Optional[str] = None
-    aadhaar_number: Optional[str] = None
     designation: Optional[str] = None
     safety_induction_done: bool = False
     medical_fitness_done: bool = False
@@ -30,8 +30,18 @@ class ContractorEmployeeCreate(BaseModel):
 
 # Contractors
 @router.get("/")
-def get_contractors(search: Optional[str] = None, skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
+def get_contractors(
+    search: Optional[str] = None, 
+    skip: int = 0, 
+    limit: int = 100, 
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
+):
     query = db.query(Contractor)
+    
+    if current_user.get("role") != "CORPORATE_SUPER_ADMIN":
+        query = query.filter(Contractor.plant_id == current_user.get("plant_id"))
+        
     if search:
         query = query.filter(Contractor.company_name.ilike(f"%{search}%"))
     return query.offset(skip).limit(limit).all()
@@ -44,8 +54,14 @@ def get_contractor(contractor_id: int, db: Session = Depends(get_db)):
     return c
 
 @router.post("/")
-def create_contractor(contractor: ContractorCreate, db: Session = Depends(get_db)):
+def create_contractor(
+    contractor: ContractorCreate, 
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
+):
     new_c = Contractor(**contractor.dict())
+    if current_user.get("role") != "CORPORATE_SUPER_ADMIN":
+        new_c.plant_id = current_user.get("plant_id")
     db.add(new_c)
     db.commit()
     db.refresh(new_c)

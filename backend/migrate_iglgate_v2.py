@@ -19,14 +19,13 @@ from app.models.user import User
 from app.models.visitor import Visitor
 from app.models.visit import Visit
 from app.models.audit_log import AuditLog
-from app.models.meeting import Meeting
-from app.models.interview import Interview
+
 from app.models.department import Department
 
 ##################################################
 # IMPORT ALL NEW IGLGATE v2.0 MODELS
 ##################################################
-from app.models.vehicle import Vehicle
+
 from app.models.contractor import Contractor, ContractorEmployee
 from app.models.vendor import Vendor
 from app.models.material import Material
@@ -42,7 +41,7 @@ from app.models.notification import Notification
 def run_migration():
     print("=" * 60)
     print("  IGLGATE v2.0 — DATABASE MIGRATION")
-    print("  Indraprastha Gas Limited")
+    print("  Indian Glycol Limited")
     print("=" * 60)
     print()
     

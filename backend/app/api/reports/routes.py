@@ -16,6 +16,7 @@ def export_reports(
     format: str = Query("csv", description="Export format: csv or excel"),
     status: Optional[str] = None,
     department_id: Optional[int] = None,
+    plant_id: Optional[int] = None,
     user: dict = Depends(get_current_user)
 ):
     db: Session = SessionLocal()
@@ -27,8 +28,10 @@ def export_reports(
     
     if status:
         query = query.filter(Visit.status == status)
-    if department_id and user.get("role") in ["SUPER_ADMIN", "ADMIN"]:
+    if department_id and user.get("role") in ["CORPORATE_SUPER_ADMIN", "PLANT_ADMIN", "SUPER_ADMIN", "ADMIN"]:
         query = query.filter(Visit.department_id == department_id)
+    if plant_id and user.get("role") in ["CORPORATE_SUPER_ADMIN", "SUPER_ADMIN", "ADMIN"]:
+        query = query.filter(Visit.plant_id == plant_id)
         
     visits = query.all()
     
@@ -71,16 +74,3 @@ def export_reports(
 
 from app.models.audit_log import AuditLog
 
-@router.get("/telegram_logs")
-def get_telegram_logs(user: dict = Depends(get_current_user)):
-    db: Session = SessionLocal()
-    
-    # Only Admin or Super Admin should view notification logs
-    role = user.get("role", "EMPLOYEE")
-    if role not in ["CORPORATE_SUPER_ADMIN", "PLANT_ADMIN"]:
-        return []
-        
-    # Fetch logs starting with TELEGRAM_
-    logs = db.query(AuditLog).filter(AuditLog.action.like("TELEGRAM_%")).order_by(AuditLog.created_at.desc()).limit(100).all()
-    
-    return logs

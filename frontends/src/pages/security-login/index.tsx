@@ -73,7 +73,7 @@ export default function SecurityLogin() {
           <div className="flex items-center justify-center gap-3 mb-4">
             <img src={logo} alt="IGL Logo" className="h-12 w-auto drop-shadow-lg" />
             <div className="text-left">
-              <p className="text-[#F7931E] text-xs font-bold tracking-[0.3em] uppercase">Indraprastha Gas Limited</p>
+              <p className="text-[#F7931E] text-xs font-bold tracking-[0.3em] uppercase">Indian Glycol Limited</p>
               <h1 className="text-white text-xl font-black tracking-tight">IGLGATE</h1>
             </div>
           </div>

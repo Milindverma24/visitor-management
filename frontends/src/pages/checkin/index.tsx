@@ -203,7 +203,7 @@ const CheckIn = () => {
                     <TableCell className="whitespace-normal break-words">{visit.purpose}</TableCell>
                     <TableCell className="whitespace-normal break-words">{visit.hostEmployee}</TableCell>
                     <TableCell className="whitespace-nowrap">
-                      <Badge variant={visit.status === 'EXPIRED' ? 'destructive' : 'success'}>
+                      <Badge variant={visit.status === 'EXPIRED' ? 'danger' : 'success'}>
                         {visit.status}
                       </Badge>
                     </TableCell>

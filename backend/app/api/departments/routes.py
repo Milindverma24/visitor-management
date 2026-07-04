@@ -3,22 +3,46 @@ from sqlalchemy.orm import Session
 from app.database.session import get_db
 from app.models.department import Department
 from app.schemas.department import DepartmentCreate, DepartmentUpdate, DepartmentResponse
+from app.security.dependencies import get_current_user
 
 router = APIRouter()
 
 @router.get("/", response_model=list[DepartmentResponse])
-def get_departments(db: Session = Depends(get_db)):
-    departments = db.query(Department).all()
-    return departments
+def get_departments(
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
+):
+    query = db.query(Department)
+    if current_user.get("role") != "CORPORATE_SUPER_ADMIN":
+        query = query.filter((Department.plant_id == current_user.get("plant_id")) | (Department.plant_id == None))
+    return query.all()
+
+@router.get("/public", response_model=list[DepartmentResponse])
+def get_public_departments(
+    plant_id: int = None,
+    db: Session = Depends(get_db)
+):
+    query = db.query(Department).filter(Department.is_active == True)
+    if plant_id:
+        query = query.filter((Department.plant_id == plant_id) | (Department.plant_id == None))
+    return query.all()
 
 @router.post("/", response_model=DepartmentResponse)
-def create_department(dept: DepartmentCreate, db: Session = Depends(get_db)):
+def create_department(
+    dept: DepartmentCreate, 
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
+):
     # Check if exists
     existing = db.query(Department).filter((Department.name == dept.name) | (Department.code == dept.code)).first()
     if existing:
         raise HTTPException(status_code=400, detail="Department with this name or code already exists")
     
     new_dept = Department(**dept.dict())
+    if current_user.get("role") != "CORPORATE_SUPER_ADMIN":
+        new_dept.plant_id = current_user.get("plant_id")
+    else:
+        new_dept.plant_id = dept.plant_id
     db.add(new_dept)
     db.commit()
     db.refresh(new_dept)

@@ -1,7 +1,7 @@
 export interface Visitor {
   id: string;
   fullName: string;
-  aadhaarNumber: string;
+
   dob: string;
   gender: string;
   photoPath: string;
@@ -27,13 +27,6 @@ export interface Visit {
   updatedAt: string;
 }
 
-export interface OcrResponse {
-  full_name: string;
-  aadhaar_number: string;
-  dob: string;
-  gender: string;
-  photo_path: string;
-}
 
 export interface AuditLog {
   id: string;

@@ -8,9 +8,8 @@ from app.database.database import Base
 
 
 class DocumentType(str, enum.Enum):
-    AADHAAR = "AADHAAR"
     DRIVING_LICENSE = "DRIVING_LICENSE"
-    VEHICLE_RC = "VEHICLE_RC"
+
     INSURANCE = "INSURANCE"
     POLLUTION_CERT = "POLLUTION_CERT"
     AUTHORIZATION = "AUTHORIZATION"
@@ -25,7 +24,7 @@ class DocumentType(str, enum.Enum):
 
 class EntityType(str, enum.Enum):
     VISITOR = "VISITOR"
-    VEHICLE = "VEHICLE"
+
     CONTRACTOR_EMPLOYEE = "CONTRACTOR_EMPLOYEE"
     CONTRACTOR = "CONTRACTOR"
     VENDOR = "VENDOR"

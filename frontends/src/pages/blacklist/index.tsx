@@ -8,7 +8,7 @@ import { Search, Plus, Trash2, AlertTriangle, ShieldOff, CheckCircle, RefreshCw 
 import toast from "react-hot-toast";
 import api from "@/services/api";
 
-const BLACKLIST_TYPES = ["VISITOR","VEHICLE","COMPANY","CONTRACTOR","VENDOR","DRIVER"];
+const BLACKLIST_TYPES = ["VISITOR","COMPANY","CONTRACTOR","VENDOR","DRIVER"];
 
 const BlacklistPage = () => {
   const [entries, setEntries] = useState<any[]>([]);
@@ -74,7 +74,7 @@ const BlacklistPage = () => {
         <CardHeader className="pb-3"><CardTitle className="flex items-center gap-2 text-red-700"><AlertTriangle className="w-5 h-5" /> Quick Blacklist Check</CardTitle></CardHeader>
         <CardContent>
           <div className="flex gap-3">
-            <Input placeholder="Enter name, vehicle number, company..." value={checkQuery} onChange={(e) => setCheckQuery(e.target.value)} onKeyDown={(e) => e.key === "Enter" && handleCheck()} className="flex-1" />
+            <Input placeholder="Enter name, company..." value={checkQuery} onChange={(e) => setCheckQuery(e.target.value)} onKeyDown={(e) => e.key === "Enter" && handleCheck()} className="flex-1" />
             <Button variant="outline" className="border-red-300 text-red-700 hover:bg-red-100" onClick={handleCheck}><Search className="h-4 w-4" /></Button>
           </div>
           {checkResult && (

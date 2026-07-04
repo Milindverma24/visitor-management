@@ -70,9 +70,8 @@ class Visitor(Base):
         nullable=True
     )
 
-    # Visitor Photo
     photo_path = Column(
-        String(500),
+        String,
         nullable=True
     )
 

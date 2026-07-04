@@ -4,19 +4,24 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
-import { Search, Plus, Edit, Trash2 } from "lucide-react";
+import { Search, Plus, Edit, Trash2, Upload } from "lucide-react";
 import toast from "react-hot-toast";
 
-import { getUsers, createUser, updateUser, deleteUser } from "@/services/userService";
+import { getUsers, createUser, updateUser, deleteUser, uploadCsv } from "@/services/userService";
 import { getDepartments } from "@/services/departmentService";
+import { getPlants } from "@/services/plantService";
+import { jwtDecode } from "jwt-decode";
 
 const Employees = () => {
   const [users, setUsers] = useState<any[]>([]);
   const [departments, setDepartments] = useState<any[]>([]);
+  const [plants, setPlants] = useState<any[]>([]);
+  const [userRole, setUserRole] = useState("EMPLOYEE");
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<any>(null);
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
 
   const [formData, setFormData] = useState({
     full_name: "",
@@ -24,6 +29,7 @@ const Employees = () => {
     employee_id: "",
     role: "EMPLOYEE",
     department_id: "",
+    plant_id: "",
     password: "",
     is_active: true
   });
@@ -31,9 +37,20 @@ const Employees = () => {
   const fetchData = async () => {
     try {
       setIsLoading(true);
-      const [usersRes, deptsRes] = await Promise.all([getUsers(), getDepartments()]);
+      const token = localStorage.getItem("token");
+      if (token) {
+        const decoded: any = jwtDecode(token);
+        setUserRole(decoded.role || "EMPLOYEE");
+      }
+      
+      const [usersRes, deptsRes, plantsRes] = await Promise.all([
+        getUsers(), 
+        getDepartments(),
+        getPlants()
+      ]);
       setUsers(usersRes.data);
       setDepartments(deptsRes.data);
+      setPlants(plantsRes.data);
     } catch (error) {
       toast.error("Failed to fetch data");
     } finally {
@@ -54,6 +71,7 @@ const Employees = () => {
         employee_id: user.employee_id || "",
         role: user.role,
         department_id: user.department_id || "",
+        plant_id: user.plant_id || "",
         password: "", // Leave blank unless changing
         is_active: user.is_active
       });
@@ -65,6 +83,7 @@ const Employees = () => {
         employee_id: "", 
         role: "EMPLOYEE", 
         department_id: "", 
+        plant_id: "",
         password: "",
         is_active: true 
       });
@@ -96,7 +115,8 @@ const Employees = () => {
 
       const payload = {
         ...formData,
-        department_id: formData.department_id ? parseInt(formData.department_id as string) : null
+        department_id: formData.department_id ? parseInt(formData.department_id as string) : null,
+        plant_id: formData.plant_id ? parseInt(formData.plant_id as string) : null
       };
 
       if (editingUser) {
@@ -124,6 +144,32 @@ const Employees = () => {
     }
   };
 
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const formData = new FormData();
+    formData.append("file", file);
+
+    try {
+      const toastId = toast.loading("Uploading CSV...");
+      const res = await uploadCsv(formData);
+      toast.dismiss(toastId);
+      
+      if (res.data && res.data.success) {
+        toast.success(res.data.message || `Added ${res.data.added} employees.`);
+        fetchData();
+      }
+    } catch (error: any) {
+      toast.dismiss();
+      toast.error(error.response?.data?.detail || "Failed to upload CSV");
+    } finally {
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
+    }
+  };
+
   const filtered = users.filter(u => 
     u.full_name?.toLowerCase().includes(searchQuery.toLowerCase()) || 
     u.email?.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -133,6 +179,11 @@ const Employees = () => {
   const getDepartmentName = (id: number) => {
     const dept = departments.find(d => d.id === id);
     return dept ? dept.name : "None";
+  };
+
+  const getPlantName = (id: number) => {
+    const plant = plants.find(p => p.id === id);
+    return plant ? plant.plant_name : "N/A";
   };
 
   return (
@@ -151,6 +202,17 @@ const Employees = () => {
                 onChange={(e) => setSearchQuery(e.target.value)}
               />
             </div>
+            <input 
+              type="file" 
+              accept=".csv" 
+              className="hidden" 
+              ref={fileInputRef} 
+              onChange={handleFileUpload} 
+            />
+            <Button variant="outline" onClick={() => fileInputRef.current?.click()} className="w-full sm:w-auto">
+              <Upload className="h-4 w-4 mr-2" />
+              Upload CSV
+            </Button>
             <Button onClick={() => handleOpenModal()} className="w-full sm:w-auto">
               <Plus className="h-4 w-4 mr-2" />
               Add Employee
@@ -165,6 +227,7 @@ const Employees = () => {
                   <TableHead className="whitespace-nowrap">Emp ID</TableHead>
                   <TableHead className="whitespace-nowrap">Name</TableHead>
                   <TableHead className="whitespace-nowrap">Email</TableHead>
+                  <TableHead className="whitespace-nowrap">Location</TableHead>
                   <TableHead className="whitespace-nowrap">Department</TableHead>
                   <TableHead className="whitespace-nowrap">Role</TableHead>
                   <TableHead className="whitespace-nowrap">Status</TableHead>
@@ -177,6 +240,7 @@ const Employees = () => {
                     <TableCell className="font-mono whitespace-nowrap">{user.employee_id || "N/A"}</TableCell>
                     <TableCell className="font-medium whitespace-normal break-words">{user.full_name}</TableCell>
                     <TableCell className="whitespace-normal break-all">{user.email}</TableCell>
+                    <TableCell className="whitespace-nowrap"><Badge variant="secondary">{getPlantName(user.plant_id)}</Badge></TableCell>
                     <TableCell className="whitespace-normal break-words">{getDepartmentName(user.department_id)}</TableCell>
                     <TableCell className="whitespace-nowrap">
                       <Badge variant="secondary">{user.role}</Badge>
@@ -233,11 +297,30 @@ const Employees = () => {
                   className="flex h-10 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
                   <option value="">Select Department</option>
-                  {departments.map(d => (
+                  {departments
+                    .filter(d => !d.plant_id || (formData.plant_id && d.plant_id === parseInt(formData.plant_id)))
+                    .map(d => (
                     <option key={d.id} value={d.id}>{d.name}</option>
                   ))}
                 </select>
               </div>
+
+              {userRole === "CORPORATE_SUPER_ADMIN" && (
+                <div className="space-y-1">
+                  <label className="text-sm font-medium text-slate-700">Location (Plant)</label>
+                  <select
+                    name="plant_id"
+                    value={formData.plant_id}
+                    onChange={handleInputChange}
+                    className="flex h-10 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="">Select Location</option>
+                    {plants.map(p => (
+                      <option key={p.id} value={p.id}>{p.plant_name}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
 
               <div className="space-y-1">
                 <label className="text-sm font-medium text-slate-700">Role</label>

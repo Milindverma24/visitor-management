@@ -9,7 +9,6 @@ import EmployeeLogin from "@/pages/authentication/EmployeeLogin";
 // Portals (no AppLayout)
 import LandingPage from "@/pages/landing/LandingPage";
 import VisitorPortal from "@/pages/visitor/VisitorPortal";
-import TransporterPortal from "@/pages/transporter/TransporterPortal";
 import SecurityLoginPage from "@/pages/security-login";
 import SecurityOps from "@/pages/security-ops";
 
@@ -23,15 +22,14 @@ import Approvals from "@/pages/approvals";
 import CheckIn from "@/pages/checkin";
 import CheckOut from "@/pages/checkout";
 import AuditLogs from "@/pages/audit";
-import Meetings from "@/pages/meetings";
-import Interviews from "@/pages/interviews";
+import Locations from "@/pages/locations";
+
 import Reports from "@/pages/reports";
-import NotificationCenter from "@/pages/notifications";
+
 import Profile from "@/pages/profile";
 
 
 // New IGLGATE Pages
-import Vehicles from "@/pages/vehicles";
 import BlacklistPage from "@/pages/blacklist";
 import Analytics from "@/pages/analytics";
 import EmergencyCommand from "@/pages/emergency";
@@ -45,10 +43,7 @@ export const router = createBrowserRouter([
     path: "/visitor",
     element: <VisitorPortal />,
   },
-  {
-    path: "/transporter",
-    element: <TransporterPortal />,
-  },
+
   {
     path: "/employee-login",
     element: <EmployeeLogin />,
@@ -78,13 +73,12 @@ export const router = createBrowserRouter([
       { path: "checkin", element: <CheckIn /> },
       { path: "checkout", element: <CheckOut /> },
       { path: "audit", element: <AuditLogs /> },
-      { path: "meetings", element: <Meetings /> },
-      { path: "interviews", element: <Interviews /> },
+      { path: "locations", element: <Locations /> },
+
       { path: "reports", element: <Reports /> },
-      { path: "notifications", element: <NotificationCenter /> },
+
       { path: "profile", element: <Profile /> },
       // New IGLGATE routes
-      { path: "vehicles", element: <Vehicles /> },
       { path: "blacklist", element: <BlacklistPage /> },
       { path: "analytics", element: <Analytics /> },
       { path: "emergency", element: <EmergencyCommand /> },

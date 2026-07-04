@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from app.database.session import get_db
 from app.models.visit import Visit
 from app.models.visitor import Visitor
-from app.models.vehicle import Vehicle
+
 from datetime import datetime
 
 router = APIRouter()
@@ -95,13 +95,6 @@ def trigger_emergency_broadcast(payload: dict, db: Session = Depends(get_db)):
     except Exception as e:
         pass
 
-    # Send Telegram notification
-    try:
-        from app.services import telegram_service
-        status_str = "🚨 EMERGENCY ACTIVE" if action == "TRIGGER" else "✅ EMERGENCY CLEARED"
-        tg_msg = f"<b>{status_str}</b>\n\nType: {alert_type}\nMessage: {message}\nTime: {datetime.utcnow().isoformat()}"
-        telegram_service.send_security_notification(db, tg_msg)
-    except Exception as e:
-        pass
+
 
     return {"success": True, "state": EMERGENCY_STATE}

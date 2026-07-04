@@ -31,3 +31,9 @@ export const uploadPhoto = (
 
 export const getVisitorStatus = (phone: string) =>
   api.get(`/api/visitors/status/${phone}`);
+
+export const getPreRegisteredVisits = (phone: string) =>
+  api.get(`/api/visitors/pre-registered/${phone}`);
+
+export const completePreRegisteredVisit = (visitId: number, data: any) =>
+  api.put(`/api/visitors/pre-registered/${visitId}/complete`, data);

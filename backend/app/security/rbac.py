@@ -38,11 +38,8 @@ VALID_ROLES = list(ROLE_HIERARCHY.keys())
 
 APPROVER_FOR = {
     "VISIT":       ["DEPARTMENT_HEAD", "PLANT_ADMIN", "CORPORATE_SUPER_ADMIN"],
-    "INTERVIEW":   ["HR_MANAGER",      "PLANT_ADMIN", "CORPORATE_SUPER_ADMIN"],
-    "MEETING":     ["DEPARTMENT_HEAD", "PLANT_ADMIN", "CORPORATE_SUPER_ADMIN"],
     "VENDOR":      ["DEPARTMENT_HEAD", "PLANT_ADMIN", "CORPORATE_SUPER_ADMIN"],
     "CONTRACTOR":  ["PLANT_ADMIN",     "CORPORATE_SUPER_ADMIN"],
-    "VEHICLE":     ["PLANT_ADMIN",     "CORPORATE_SUPER_ADMIN"],
 }
 
 ##################################################
@@ -57,24 +54,12 @@ CREATOR_FOR = {
         "DEPARTMENT_HEAD", "HR_MANAGER", "HR_EXECUTIVE",
         "PLANT_ADMIN", "CORPORATE_SUPER_ADMIN"
     ],
-    "INTERVIEW":  [
-        "HR_EXECUTIVE", "HR_MANAGER",
-        "PLANT_ADMIN",  "CORPORATE_SUPER_ADMIN"
-    ],
-    "MEETING":    [
-        "EMPLOYEE", "RECEPTIONIST", "DEPARTMENT_EXECUTIVE",
-        "DEPARTMENT_HEAD", "HR_MANAGER", "HR_EXECUTIVE",
-        "PLANT_ADMIN", "CORPORATE_SUPER_ADMIN"
-    ],
+
     "VENDOR":     [
         "DEPARTMENT_EXECUTIVE", "DEPARTMENT_HEAD",
         "PLANT_ADMIN",          "CORPORATE_SUPER_ADMIN"
     ],
     "CONTRACTOR": [
-        "DEPARTMENT_EXECUTIVE", "DEPARTMENT_HEAD",
-        "PLANT_ADMIN",          "CORPORATE_SUPER_ADMIN"
-    ],
-    "VEHICLE":    [
         "DEPARTMENT_EXECUTIVE", "DEPARTMENT_HEAD",
         "PLANT_ADMIN",          "CORPORATE_SUPER_ADMIN"
     ],
@@ -150,62 +135,25 @@ def can_approve_visit(user: dict, visit, db: Session) -> bool:
     if role in ["CORPORATE_SUPER_ADMIN", "PLANT_ADMIN"]:
         return True
 
+    # According to new rule, ANY employee can approve ANY visit
+    if role == "EMPLOYEE":
+        return True
+
     # Department Head: must be head of host department
     if role == "DEPARTMENT_HEAD":
         return user.get("department_id") == visit.department_id
 
-    return False
-
-
-##################################################
-# HELPER: Can approve Interview?
-# Only HR_MANAGER (scoped to HR dept) can give
-# final interview approval.
-##################################################
-
-def can_approve_interview(user: dict, interview, db: Session) -> bool:
-    """
-    Determines if the current user is authorized
-    to approve an interview request.
-    """
-    role = user.get("role", "EMPLOYEE")
-
-    if role in ["CORPORATE_SUPER_ADMIN", "PLANT_ADMIN"]:
+    # Fallback to allow if they are the host (just in case they have a different role)
+    if visit.host_employee in [user.get("sub"), user.get("full_name"), user.get("employee_id")]:
         return True
 
+    # Also let HR Managers approve
     if role == "HR_MANAGER":
-        # HR Manager can approve any interview in their plant
         return True
 
     return False
 
 
-##################################################
-# HELPER: Can approve Meeting?
-# DEPARTMENT_HEAD scoped to host department.
-##################################################
-
-def can_approve_meeting(user: dict, meeting, db: Session) -> bool:
-    """
-    Determines if the current user is authorized
-    to approve a meeting request.
-    """
-    role = user.get("role", "EMPLOYEE")
-
-    if role in ["CORPORATE_SUPER_ADMIN", "PLANT_ADMIN"]:
-        return True
-
-    if role == "DEPARTMENT_HEAD":
-        # Must be the head of the host department
-        from app.models.department import Department
-        dept = db.query(Department).filter(
-            Department.id == user.get("department_id")
-        ).first()
-        if dept:
-            host_dept = getattr(meeting, "host_department", "") or ""
-            return dept.name.upper() == host_dept.upper()
-
-    return False
 
 
 ##################################################

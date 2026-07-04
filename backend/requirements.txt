@@ -63,10 +63,8 @@ httpx==0.28.1
 # THIRD-PARTY INTEGRATIONS & UTILS
 ##################################################
 
-easyocr==1.7.1
 reportlab==4.1.0
 Jinja2==3.1.3
-opencv-python-headless==4.9.0.80
 qrcode==7.4.2
 Pillow==10.2.0
 twilio==9.0.1

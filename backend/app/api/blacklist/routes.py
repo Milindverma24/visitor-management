@@ -5,6 +5,7 @@ from pydantic import BaseModel
 from app.database.session import get_db
 from app.models.blacklist import Blacklist, BlacklistType
 from datetime import datetime
+from app.security.dependencies import get_current_user
 
 router = APIRouter()
 
@@ -24,9 +25,13 @@ def get_blacklist(
     search: Optional[str] = None,
     skip: int = 0,
     limit: int = 100,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
 ):
     query = db.query(Blacklist)
+    if current_user.get("role") != "CORPORATE_SUPER_ADMIN":
+        query = query.filter(Blacklist.plant_id == current_user.get("plant_id"))
+        
     if blacklist_type:
         query = query.filter(Blacklist.blacklist_type == blacklist_type)
     if is_active is not None:
@@ -40,7 +45,7 @@ def get_blacklist(
 
 @router.post("/check")
 def check_blacklist(identifier: str, blacklist_type: Optional[str] = None, db: Session = Depends(get_db)):
-    """Quick check if an identifier (name, vehicle number, etc.) is blacklisted."""
+    """Quick check if an identifier (name, phone, etc.) is blacklisted."""
     query = db.query(Blacklist).filter(
         Blacklist.reference_identifier.ilike(f"%{identifier}%"),
         Blacklist.is_active == True
@@ -59,7 +64,7 @@ def check_blacklist(identifier: str, blacklist_type: Optional[str] = None, db: S
 
 def sync_unblacklist(db: Session, blacklist_type: str, reference_identifier: str, reference_name: str | None, reference_id: int | None):
     from app.models.visitor import Visitor
-    from app.models.vehicle import Vehicle
+
     from sqlalchemy import or_
     
     if blacklist_type in ["VISITOR", "DRIVER"]:
@@ -74,20 +79,14 @@ def sync_unblacklist(db: Session, blacklist_type: str, reference_identifier: str
             visitors = db.query(Visitor).filter(or_(*filters)).all()
             for v in visitors:
                 v.is_blacklisted = False
-    elif blacklist_type == "VEHICLE":
-        filters = []
-        if reference_identifier:
-            filters.append(Vehicle.vehicle_number == reference_identifier.upper())
-        if reference_id:
-            filters.append(Vehicle.id == reference_id)
-        if filters:
-            vehicles = db.query(Vehicle).filter(or_(*filters)).all()
-            for veh in vehicles:
-                veh.is_blacklisted = False
-                veh.blacklist_reason = None
+
 
 @router.post("/")
-def add_to_blacklist(entry: BlacklistCreate, db: Session = Depends(get_db)):
+def add_to_blacklist(
+    entry: BlacklistCreate, 
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
+):
     # Check if already blacklisted
     existing = db.query(Blacklist).filter(
         Blacklist.reference_identifier == entry.reference_identifier,
@@ -98,11 +97,13 @@ def add_to_blacklist(entry: BlacklistCreate, db: Session = Depends(get_db)):
         raise HTTPException(status_code=400, detail="Already blacklisted")
     
     new_entry = Blacklist(**entry.dict())
+    if current_user.get("role") != "CORPORATE_SUPER_ADMIN":
+        new_entry.plant_id = current_user.get("plant_id")
+        
     db.add(new_entry)
     
-    # Sync with Visitor or Vehicle
+    # Sync with Visitor
     from app.models.visitor import Visitor
-    from app.models.vehicle import Vehicle
     from sqlalchemy import or_
     
     if entry.blacklist_type in ["VISITOR", "DRIVER"]:
@@ -117,17 +118,7 @@ def add_to_blacklist(entry: BlacklistCreate, db: Session = Depends(get_db)):
             visitors = db.query(Visitor).filter(or_(*filters)).all()
             for v in visitors:
                 v.is_blacklisted = True
-    elif entry.blacklist_type == "VEHICLE":
-        filters = []
-        if entry.reference_identifier:
-            filters.append(Vehicle.vehicle_number == entry.reference_identifier.upper())
-        if entry.reference_id:
-            filters.append(Vehicle.id == entry.reference_id)
-        if filters:
-            vehicles = db.query(Vehicle).filter(or_(*filters)).all()
-            for veh in vehicles:
-                veh.is_blacklisted = True
-                veh.blacklist_reason = entry.reason
+
 
     db.commit()
     db.refresh(new_entry)

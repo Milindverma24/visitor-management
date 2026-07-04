@@ -9,6 +9,7 @@ class DepartmentBase(BaseModel):
     email: Optional[str] = None
     phone: Optional[str] = None
     is_active: Optional[bool] = True
+    plant_id: Optional[int] = None
 
 class DepartmentCreate(DepartmentBase):
     pass
@@ -20,6 +21,7 @@ class DepartmentUpdate(BaseModel):
     email: Optional[str] = None
     phone: Optional[str] = None
     is_active: Optional[bool] = None
+    plant_id: Optional[int] = None
 
 class DepartmentResponse(DepartmentBase):
     id: int

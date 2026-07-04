@@ -99,11 +99,9 @@ export default function SecurityOps() {
   const fetchLists = async () => {
     setIsLoadingLists(true);
     try {
-      const [visitsRes, visitorsRes, meetingsRes, interviewsRes] = await Promise.all([
+      const [visitsRes, visitorsRes] = await Promise.all([
         api.get("/api/visitors/visits"),
-        api.get("/api/visitors/"),
-        api.get("/api/meetings/"),
-        api.get("/api/interviews/")
+        api.get("/api/visitors/")
       ]);
 
       const visitorsMap = new Map();
@@ -143,57 +141,6 @@ export default function SecurityOps() {
         });
       }
 
-      // 2. Map meetings
-      if (Array.isArray(meetingsRes.data)) {
-        meetingsRes.data.forEach((meeting: any) => {
-          const mappedMeeting = {
-            id: meeting.id,
-            card_id: meeting.pass_number || `MTG-${meeting.id}`,
-            visitor_name: meeting.visitor_name || "Unknown",
-            company: meeting.company_name || "N/A",
-            phone: meeting.visitor_mobile || "",
-            purpose: meeting.title || "N/A",
-            host_employee: meeting.host_employee || "N/A",
-            pass_type: "MEETING_PASS",
-            status: meeting.status,
-            check_in_time: meeting.check_in_time,
-            check_out_time: meeting.check_out_time,
-            gate_number: meeting.entry_gate || meeting.exit_gate
-          };
-
-          if (meeting.status === "APPROVED" && !meeting.check_in_time) {
-            pending.push(mappedMeeting);
-          } else if (meeting.status === "Checked-In" || (meeting.check_in_time && !meeting.check_out_time)) {
-            checkedIn.push(mappedMeeting);
-          }
-        });
-      }
-
-      // 3. Map interviews
-      if (Array.isArray(interviewsRes.data)) {
-        interviewsRes.data.forEach((interview: any) => {
-          const mappedInterview = {
-            id: interview.id,
-            card_id: interview.pass_number || `INT-${interview.id}`,
-            visitor_name: interview.candidate_name || "Unknown",
-            company: "Candidate",
-            phone: interview.candidate_mobile || "",
-            purpose: `Interview: ${interview.position}`,
-            host_employee: interview.interviewer_name || "N/A",
-            pass_type: "INTERVIEW_PASS",
-            status: interview.status,
-            check_in_time: interview.check_in_time,
-            check_out_time: interview.check_out_time,
-            gate_number: interview.entry_gate || interview.exit_gate
-          };
-
-          if (interview.status === "APPROVED" && !interview.check_in_time) {
-            pending.push(mappedInterview);
-          } else if (interview.status === "Checked-In" || (interview.check_in_time && !interview.check_out_time)) {
-            checkedIn.push(mappedInterview);
-          }
-        });
-      }
 
       setPendingCheckins(pending);
       setCheckedInVisitors(checkedIn);
@@ -281,17 +228,8 @@ export default function SecurityOps() {
   // Handle confirm check-in
   const handleCheckIn = async (passId: number) => {
     try {
-      const type = scanResult?.pass_type;
-      if (type === "INTERVIEW_PASS") {
-        await api.post(`/api/interviews/${passId}/checkin`, { gate_number: gateNumber });
-        toast.success("Interview Candidate checked in!");
-      } else if (type === "MEETING_PASS") {
-        await api.post(`/api/meetings/${passId}/checkin`, { gate_number: gateNumber });
-        toast.success("Meeting Visitor checked in!");
-      } else {
-        await api.put(`/api/visitors/checkin/${passId}`);
-        toast.success("Visitor checked in!");
-      }
+      await api.put(`/api/visitors/checkin/${passId}`);
+      toast.success("Visitor checked in!");
       setScanResult(null);
       setScanInput("");
       fetchOccupancy();
@@ -306,17 +244,8 @@ export default function SecurityOps() {
   // Handle confirm check-out
   const handleCheckOut = async (passId: number) => {
     try {
-      const type = scanResult?.pass_type;
-      if (type === "INTERVIEW_PASS") {
-        await api.post(`/api/interviews/${passId}/checkout`, { gate_number: gateNumber });
-        toast.success("Interview Candidate checked out!");
-      } else if (type === "MEETING_PASS") {
-        await api.post(`/api/meetings/${passId}/checkout`, { gate_number: gateNumber });
-        toast.success("Meeting Visitor checked out!");
-      } else {
-        await api.put(`/api/visitors/checkout/${passId}`);
-        toast.success("Visitor checked out!");
-      }
+      await api.put(`/api/visitors/checkout/${passId}`);
+      toast.success("Visitor checked out!");
       setScanResult(null);
       setScanInput("");
       fetchOccupancy();
@@ -846,7 +775,7 @@ export default function SecurityOps() {
                 value={blacklistQuery}
                 onChange={(e) => setBlacklistQuery(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && handleBlacklistCheck()}
-                placeholder="Name, phone, vehicle, company..."
+                placeholder="Name, phone, company..."
                 className="flex-1 bg-[#050A14] border border-[#1A2E4A] rounded-xl px-4 py-3 text-white placeholder-slate-700 text-sm focus:border-red-750 focus:outline-none"
               />
               <button
@@ -898,7 +827,7 @@ export default function SecurityOps() {
                 <Radio className="w-4 h-4 text-red-500 animate-pulse" /> Emergency Command Station
               </h4>
               <p className="text-slate-500 text-xs mb-5">
-                Broadcast site-wide evacuation protocols instantly. Active alarms will trigger Telegram broadcasts to safety supervisors, visual web alerts, and SMS alerts.
+                Broadcast site-wide evacuation protocols instantly. Active alarms will trigger visual web alerts and SMS alerts to safety supervisors.
               </p>
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
                 <button

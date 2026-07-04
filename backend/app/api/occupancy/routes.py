@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from app.database.session import get_db
 from app.models.visit import Visit
-from app.models.vehicle import Vehicle
+
 
 router = APIRouter()
 
@@ -29,8 +29,7 @@ def get_live_occupancy(db: Session = Depends(get_db)):
     return {
         "total_inside": total,
         "visitors": breakdown.get("VISITOR_PASS", 0),
-        "interviews": breakdown.get("INTERVIEW_PASS", 0),
-        "meetings": breakdown.get("MEETING_PASS", 0),
+
         "contractors": breakdown.get("CONTRACTOR_PASS", 0),
         "vendors": breakdown.get("VENDOR_PASS", 0),
         "temp_employees": breakdown.get("TEMPORARY_EMPLOYEE_PASS", 0),

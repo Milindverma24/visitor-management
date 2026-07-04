@@ -32,30 +32,21 @@ from app.security.rbac import (
     role_required,
     VALID_ROLES
 )
-from app.api.ocr.routes import (
-    router as ocr_router
-)
+
 from app.api.admin.routes import (
     router as admin_router
 )
 from app.api.departments.routes import (
     router as department_router
 )
-from app.api.meetings.routes import (
-    router as meeting_router
-)
-from app.api.interviews.routes import (
-    router as interview_router
-)
+
 from app.api.reports.routes import (
     router as report_router
 )
 from app.api.users.routes import (
     router as users_router
 )
-from app.api.vehicles.routes import (
-    router as vehicles_router
-)
+
 from app.api.contractors.routes import (
     router as contractors_router
 )
@@ -86,6 +77,9 @@ from app.api.plants.routes import (
 from app.api.websockets import (
     router as websockets_router
 )
+from app.api.approvals.routes import (
+    router as approvals_router
+)
 
 ##################################################
 # APP
@@ -93,11 +87,20 @@ from app.api.websockets import (
 
 from fastapi.staticfiles import StaticFiles
 import os
+from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI(
     title="IGLGATE v3.0 — Enterprise Access Management System",
-    description="Indraprastha Gas Limited | Real-World Industrial Security Platform",
+    description="Indian Glycol Limited | Real-World Industrial Security Platform",
     version="3.0.0"
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=False,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 # Mount static files for photo uploads
@@ -116,7 +119,7 @@ def startup_event():
         "uploads/qrcodes",
         "uploads/badges",
         "uploads/documents",
-        "uploads/vehicle_docs",
+
         "uploads/passes",
         "uploads/resumes",
         "uploads/certificates",
@@ -126,15 +129,14 @@ def startup_event():
         os.makedirs(d, exist_ok=True)
 
 app.include_router(visitor_router)
-app.include_router(ocr_router)
+
 app.include_router(admin_router)
 app.include_router(department_router, prefix="/api/departments", tags=["departments"])
-app.include_router(meeting_router)
-app.include_router(interview_router)
+
 app.include_router(report_router)
 app.include_router(websockets_router)
 app.include_router(users_router,       prefix="/api/users",       tags=["users"])
-app.include_router(vehicles_router,    prefix="/api/vehicles",    tags=["vehicles"])
+
 app.include_router(contractors_router, prefix="/api/contractors", tags=["contractors"])
 app.include_router(vendors_router,     prefix="/api/vendors",     tags=["vendors"])
 app.include_router(materials_router,   prefix="/api/materials",   tags=["materials"])
@@ -144,6 +146,7 @@ app.include_router(emergency_router,   prefix="/api/emergency",   tags=["emergen
 app.include_router(occupancy_router,   prefix="/api/occupancy",   tags=["occupancy"])
 app.include_router(analytics_router,   prefix="/api/analytics",   tags=["analytics"])
 app.include_router(plants_router,      prefix="/api/plants",      tags=["plants"])
+app.include_router(approvals_router,   tags=["approvals"])
 
 ##################################################
 # DATABASE
@@ -178,10 +181,9 @@ def home():
 
 @app.post("/api/auth/register")
 def register_user(
-    request: RegisterRequest
+    request: RegisterRequest,
+    db: Session = Depends(get_db)
 ):
-
-    db: Session = SessionLocal()
 
     ##################################################
     # VALIDATE ROLE
@@ -257,17 +259,16 @@ def register_user(
 
 @app.post("/api/auth/login")
 def login_user(
-    request: LoginRequest
+    request: LoginRequest,
+    db: Session = Depends(get_db)
 ):
-
-    db: Session = SessionLocal()
 
     ##################################################
     # FIND USER
     ##################################################
 
     user = db.query(User).filter(
-        User.email == request.email
+        (User.email == request.email) | (User.employee_id == request.email)
     ).first()
 
     if not user:
@@ -343,11 +344,17 @@ def get_me(
     user=Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
+    from app.schemas.user import UserResponse
     db_user = db.query(User).filter(User.id == user.get("user_id")).first()
+
+    if db_user:
+        user_data = UserResponse.model_validate(db_user).model_dump()
+    else:
+        user_data = user
 
     return {
         "success": True,
-        "user": db_user if db_user else user
+        "user": user_data
     }
 
 

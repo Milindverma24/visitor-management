@@ -11,7 +11,7 @@ echo "Starting Backend..."
 cd backend
 source venv/bin/activate
 # Start uvicorn in the background
-uvicorn app.main:app --host 127.0.0.1 --port 8001 --reload &
+uvicorn app.main:app --host 0.0.0.0 --port 8001 --reload &
 BACKEND_PID=$!
 cd ..
 
