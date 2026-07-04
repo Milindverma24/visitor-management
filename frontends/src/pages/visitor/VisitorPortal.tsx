@@ -1064,7 +1064,7 @@ export default function VisitorPortal() {
                 )}
 
                 {/* MODERN GRID LAYOUT */}
-                <div className="flex-1 grid grid-cols-4 gap-x-6 gap-y-5 content-start pr-2 custom-scrollbar overflow-y-auto pb-4">
+                <div className="flex-1 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-x-6 gap-y-5 content-start pr-2 custom-scrollbar overflow-y-auto pb-4">
                   
                   {/* Row 1 */}
                   <div className="col-span-1">
@@ -1184,11 +1184,11 @@ export default function VisitorPortal() {
                   </div>
 
                   {/* Row 5: Text areas */}
-                  <div className="col-span-2 mt-1">
+                  <div className="col-span-1 md:col-span-2 mt-1">
                     <label className={labelClass}>Full Address</label>
                     <textarea disabled={!!selectedMeetingId} required name="address" value={formData.address} onChange={handleInputChange} className={textAreaClass} placeholder="Enter complete residential or office address" />
                   </div>
-                  <div className="col-span-2 mt-1">
+                  <div className="col-span-1 md:col-span-2 mt-1">
                     <label className={labelClass}>Declared Assets (Laptops, Tools)</label>
                     <textarea disabled={!!selectedMeetingId} name="accessories" value={formData.accessories} onChange={handleInputChange} className={textAreaClass} placeholder="List any electronics or equipment" />
                   </div>

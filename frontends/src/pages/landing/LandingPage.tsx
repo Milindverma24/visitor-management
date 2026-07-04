@@ -128,7 +128,7 @@ export default function LandingPage() {
         </div>
 
         {/* Access Cards Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 w-full max-w-5xl mx-auto h-auto min-h-[360px] max-h-[500px]">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 w-full max-w-5xl mx-auto h-auto md:min-h-[360px]">
           {accessCards.map((card, index) => {
             const Icon = card.icon;
             return (
