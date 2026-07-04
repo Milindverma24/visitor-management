@@ -1,17 +1,14 @@
 import os
-import smtplib
-
+import json
+import urllib.request
+import urllib.error
 from dotenv import load_dotenv
-
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
-from email.mime.application import MIMEApplication
 
 load_dotenv()
 
+# We need the verified sender email and Brevo API Key
 EMAIL_USER = os.getenv("EMAIL_USER")
-EMAIL_PASSWORD = os.getenv("EMAIL_PASSWORD")
-
+BREVO_API_KEY = os.getenv("BREVO_API_KEY")
 
 def send_email(
     recipient_email,
@@ -22,84 +19,65 @@ def send_email(
     attachment_base64=None,
     attachment_name=None
 ):
+    if not BREVO_API_KEY:
+        print("Warning: BREVO_API_KEY is not set. Cannot send email.")
+        return
 
-    import email.utils
-    message = MIMEMultipart()
-
-    message["From"] = f"Indian Glycol Limited <{EMAIL_USER}>"
-    message["To"] = recipient_email
-    message["Subject"] = subject
-    message["Message-ID"] = email.utils.make_msgid()
-    message["Date"] = email.utils.formatdate(localtime=True)
+    url = "https://api.brevo.com/v3/smtp/email"
+    
+    payload = {
+        "sender": {"name": "Indian Glycol Limited", "email": EMAIL_USER},
+        "to": [{"email": recipient_email}],
+        "subject": subject,
+    }
 
     if is_html:
-        message.attach(MIMEText(body, "html"))
+        payload["htmlContent"] = body
     else:
-        message.attach(MIMEText(body, "plain"))
+        payload["textContent"] = body
 
-    ##################################################
-    # ATTACH PDF
-    ##################################################
+    attachments = []
 
     if attachment_base64:
-        import base64
-        try:
-            base64_data = attachment_base64
-            if "," in base64_data:
-                base64_data = base64_data.split(",")[1]
-            pdf_bytes = base64.b64decode(base64_data)
+        # Strip data URL prefix if present
+        base64_data = attachment_base64
+        if "," in base64_data:
+            base64_data = base64_data.split(",")[1]
             
-            part = MIMEApplication(
-                pdf_bytes,
-                Name=attachment_name or "visitor_pass.pdf"
-            )
-            part["Content-Disposition"] = f'attachment; filename="{attachment_name or "visitor_pass.pdf"}"'
-            message.attach(part)
-        except Exception as e:
-            print(f"Failed to attach base64 pdf: {e}")
+        attachments.append({
+            "content": base64_data,
+            "name": attachment_name or "visitor_pass.pdf"
+        })
 
-    elif attachment_path and os.path.exists(
-        attachment_path
-    ):
+    elif attachment_path and os.path.exists(attachment_path):
+        import base64
+        with open(attachment_path, "rb") as file:
+            pdf_bytes = file.read()
+        
+        attachments.append({
+            "content": base64.b64encode(pdf_bytes).decode("utf-8"),
+            "name": os.path.basename(attachment_path)
+        })
 
-        with open(
-            attachment_path,
-            "rb"
-        ) as file:
+    if attachments:
+        payload["attachment"] = attachments
 
-            part = MIMEApplication(
-                file.read(),
-                Name=os.path.basename(
-                    attachment_path
-                )
-            )
+    data = json.dumps(payload).encode("utf-8")
+    
+    req = urllib.request.Request(url, data=data)
+    req.add_header("accept", "application/json")
+    req.add_header("api-key", BREVO_API_KEY)
+    req.add_header("content-type", "application/json")
 
-        part[
-            "Content-Disposition"
-        ] = (
-            f'attachment; filename="{os.path.basename(attachment_path)}"'
-        )
-
-        message.attach(part)
-
-    ##################################################
-
-    server = smtplib.SMTP(
-        "smtp.gmail.com",
-        587
-    )
-
-    server.starttls()
-
-    server.login(
-        EMAIL_USER,
-        EMAIL_PASSWORD
-    )
-
-    server.sendmail(
-        EMAIL_USER,
-        recipient_email,
-        message.as_string()
-    )
-
-    server.quit()
+    try:
+        response = urllib.request.urlopen(req)
+        response_data = response.read().decode("utf-8")
+        print(f"Email sent successfully: {response_data}")
+        return response_data
+    except urllib.error.HTTPError as e:
+        error_msg = e.read().decode("utf-8")
+        print(f"Failed to send email via Brevo: {error_msg}")
+        raise Exception(f"Brevo API error: {error_msg}")
+    except Exception as e:
+        print(f"Failed to send email: {e}")
+        raise e
