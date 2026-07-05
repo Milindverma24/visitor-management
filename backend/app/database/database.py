@@ -15,7 +15,10 @@ from app.core.config import settings
 import os
 
 DATABASE_URL = os.getenv("DATABASE_URL")
-if not DATABASE_URL:
+if DATABASE_URL:
+    if DATABASE_URL.startswith("postgres://"):
+        DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
+else:
     DATABASE_URL = (
         f"postgresql://"
         f"{settings.POSTGRES_USER}:"
