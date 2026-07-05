@@ -2,6 +2,13 @@
 # IMPORTS
 ##################################################
 
+import bcrypt
+# Workaround for passlib bcrypt version parsing issue on Python 3.12+
+if not hasattr(bcrypt, "__about__"):
+    class About:
+        __version__ = getattr(bcrypt, "__version__", "4.0.0")
+    bcrypt.__about__ = About()
+
 from passlib.context import CryptContext
 
 

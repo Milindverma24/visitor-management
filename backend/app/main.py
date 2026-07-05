@@ -117,6 +117,17 @@ def startup_event():
     # Create all database tables
     Base.metadata.create_all(bind=engine)
 
+    # Ensure profile_photo_path (users) and photo_path (visitors) are TEXT (for base64 storage) in PostgreSQL
+    from sqlalchemy import text
+    try:
+        with engine.connect() as conn:
+            conn.execute(text("ALTER TABLE users ALTER COLUMN profile_photo_path TYPE TEXT;"))
+            conn.execute(text("ALTER TABLE visitors ALTER COLUMN photo_path TYPE TEXT;"))
+            conn.commit()
+            print("Alter column type to TEXT for profile_photo_path and photo_path succeeded.")
+    except Exception as e:
+        print(f"Skipping altering photo_path column: {e}")
+
     dirs = [
         "uploads/visitor_photos",
         "uploads/photos",
