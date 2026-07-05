@@ -28,15 +28,22 @@ else:
         f"{settings.POSTGRES_DB}"
     )
 
-##################################################
-# SQLALCHEMY ENGINE
-##################################################
+from sqlalchemy.pool import NullPool
+
+# If DATABASE_URL is remote (not localhost/127.0.0.1), use NullPool to avoid connection limit exhaustion on Render/Neon
+use_null_pool = "localhost" not in DATABASE_URL and "127.0.0.1" not in DATABASE_URL
+engine_kwargs = {
+    "pool_pre_ping": True,
+}
+if use_null_pool:
+    engine_kwargs["poolclass"] = NullPool
+else:
+    engine_kwargs["pool_size"] = 5
+    engine_kwargs["max_overflow"] = 10
 
 engine = create_engine(
     DATABASE_URL,
-    pool_pre_ping=True,
-    pool_size=10,
-    max_overflow=20
+    **engine_kwargs
 )
 
 ##################################################
