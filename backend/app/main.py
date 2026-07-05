@@ -2,7 +2,7 @@
 # IMPORTS
 ##################################################
 from app.database.database import Base, engine
-from fastapi import FastAPI, Depends
+from fastapi import FastAPI, Depends, Response
 from sqlalchemy.orm import Session
 
 from app.database.session import SessionLocal
@@ -188,6 +188,10 @@ def home():
     return {
         "message": "Visitor Management API Running"
     }
+
+@app.get("/favicon.ico", include_in_schema=False)
+def favicon():
+    return Response(status_code=204)
 
 
 ##################################################
