@@ -2,10 +2,10 @@ import React, { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import Webcam from "react-webcam";
-import { 
-  ArrowLeft, 
-  Camera, 
-  User, 
+import {
+  ArrowLeft,
+  Camera,
+  User,
   Clock,
   Printer,
   Sparkles,
@@ -52,18 +52,18 @@ const formatHostName = (host: string) => {
 export default function VisitorPortal() {
   const navigate = useNavigate();
   const webcamRef = useRef<Webcam>(null);
-  
+
   const [entryMode, setEntryMode] = useState<'login' | 'idle' | 'phone_entry' | 'meetings_list' | 'form'>('login');
   const [searchPhone, setSearchPhone] = useState("");
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  
+
   const [employeeId, setEmployeeId] = useState("");
   const [adminPassword, setAdminPassword] = useState("");
 
   const [plants, setPlants] = useState<any[]>([]);
   const [departments, setDepartments] = useState<any[]>([]);
-  const [availableHosts, setAvailableHosts] = useState<{email: string, label: string}[]>([]);
+  const [availableHosts, setAvailableHosts] = useState<{ email: string, label: string }[]>([]);
   const [useWebcam, setUseWebcam] = useState(false);
   const [capturedPhoto, setCapturedPhoto] = useState<string | null>(null);
   const [isSafetyChecked, setIsSafetyChecked] = useState(false);
@@ -143,7 +143,7 @@ export default function VisitorPortal() {
     const fetchHosts = async () => {
       if (formData.department && formData.plant_id) {
         try {
-          const res = await getPublicUsers({ 
+          const res = await getPublicUsers({
             department_name: formData.department,
             plant_id: parseInt(formData.plant_id)
           });
@@ -202,10 +202,10 @@ export default function VisitorPortal() {
   const handleKioskLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
-    
+
     await new Promise(resolve => setTimeout(resolve, 600)); // Simulate validation delay
 
-    if (employeeId.trim() !== "" && adminPassword === "12345") {
+    if (employeeId.trim() === "2222" && adminPassword === "12345") {
       const twelveHoursInMs = 12 * 60 * 60 * 1000;
       localStorage.setItem("kiosk_unlock_expiry", (Date.now() + twelveHoursInMs).toString());
       toast.success("Kiosk System Unlocked for 12 hours.");
@@ -213,7 +213,7 @@ export default function VisitorPortal() {
     } else {
       toast.error("Invalid Employee ID or Password.");
     }
-    
+
     setIsLoading(false);
   };
 
@@ -303,7 +303,7 @@ export default function VisitorPortal() {
       setSelectedMeetingId(meeting.visit_id);
       setSelectedMeetingVisitorId(meeting.visitor_id);
     }
-    
+
     const formatDateForInput = (dateStr: string | null) => {
       if (!dateStr) return getLocalDateTimeString(0);
       try {
@@ -313,7 +313,7 @@ export default function VisitorPortal() {
         return getLocalDateTimeString(0);
       }
     };
-    
+
     setFormData({
       cardId: isPastVisit ? "Auto Generated" : (meeting.card_id || "Auto Generated"),
       title: meeting.title || "Mr.",
@@ -336,14 +336,14 @@ export default function VisitorPortal() {
       accompaniedByCount: meeting.accompanied_by_count || 0,
       photoPath: ""
     });
-    
+
     setEntryMode('form');
   };
 
   const handleBypassMeetingsList = async () => {
     setSelectedMeetingId(null);
     setSelectedMeetingVisitorId(null);
-    
+
     setIsLoading(true);
     try {
       const visitorRes = await searchVisitor(searchPhone);
@@ -385,7 +385,7 @@ export default function VisitorPortal() {
 
   const handleSubmitRequest = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     // One final blacklist check just in case it's a new registration and they typed a blacklisted number manually
     try {
       const blacklistRes = await checkBlacklist(formData.phoneNumber);
@@ -393,7 +393,7 @@ export default function VisitorPortal() {
         toast.error(`Access Denied: ${blacklistRes.data.reason || 'Number is restricted by security.'}`);
         return;
       }
-    } catch (e) {}
+    } catch (e) { }
 
     if (!capturedPhoto) {
       toast.error("Please capture or upload a visitor photo.");
@@ -421,11 +421,11 @@ export default function VisitorPortal() {
           up_to: formData.upTo,
           mobile_token_no: formData.mobileTokenNo
         };
-        
+
         const res = await completePreRegisteredVisit(selectedMeetingId, completePayload);
         if (res.data.success) {
-          setFormData(prev => ({ 
-            ...prev, 
+          setFormData(prev => ({
+            ...prev,
             cardId: res.data.card_id || prev.cardId,
             status: res.data.status || "PENDING"
           }));
@@ -443,7 +443,7 @@ export default function VisitorPortal() {
           category: formData.category,
           photo_base64: capturedPhoto || formData.photoPath
         };
-        
+
         const visitorRes = await createVisitor(visitorPayload);
         const visitorId = visitorRes.data.visitor_id;
 
@@ -461,11 +461,11 @@ export default function VisitorPortal() {
           valid_up_to: new Date(formData.validUpTo).toISOString(),
           accompanied_by_count: Number(formData.accompaniedByCount)
         };
-        
+
         const visitRes = await createVisit(visitPayload);
         if (visitRes.data.success) {
-          setFormData(prev => ({ 
-            ...prev, 
+          setFormData(prev => ({
+            ...prev,
             cardId: visitRes.data.card_id || `VM/${visitRes.data.visit_id.toString().padStart(6, '0')}`,
             status: "PENDING"
           }));
@@ -476,8 +476,8 @@ export default function VisitorPortal() {
     } catch (error: any) {
       console.warn("Backend submission error, fallback to simulated pending clearance");
       await new Promise(resolve => setTimeout(resolve, 1200));
-      setFormData(prev => ({ 
-        ...prev, 
+      setFormData(prev => ({
+        ...prev,
         cardId: `VM/${Math.floor(100000 + Math.random() * 900000)}`,
         status: "PENDING"
       }));
@@ -516,7 +516,7 @@ export default function VisitorPortal() {
 
   return (
     <div className="min-h-screen w-screen bg-[#F8FAFC] text-[#0F172A] relative overflow-x-hidden flex flex-col font-sans industrial-grid">
-      
+
       {/* Background aesthetic blobs */}
       <div className="absolute top-0 left-1/4 w-[500px] h-[500px] bg-[#2563EB]/5 rounded-full blur-[120px] pointer-events-none" />
       <div className="absolute bottom-20 right-1/4 w-[600px] h-[600px] bg-[#FBBF24]/5 rounded-full blur-[140px] pointer-events-none" />
@@ -532,7 +532,7 @@ export default function VisitorPortal() {
             <span className="text-[10px] uppercase font-bold text-slate-500 tracking-widest mt-0.5 block">Visitor Management Kiosk</span>
           </div>
         </div>
-        
+
         <div className="flex items-center gap-3">
           {entryMode !== 'login' && (
             <>
@@ -567,7 +567,7 @@ export default function VisitorPortal() {
       {/* MAIN CONTAINER */}
       <main className="flex-1 w-full max-w-[1500px] mx-auto p-4 md:p-8 flex flex-col items-center justify-start md:justify-center z-10">
         <AnimatePresence mode="wait">
-          
+
           {isSubmitted ? (
             /* COMPLETED RECEIPT VIEW */
             <motion.div
@@ -577,7 +577,7 @@ export default function VisitorPortal() {
               exit={{ opacity: 0, scale: 0.95 }}
               className="w-full flex flex-col items-center justify-center h-full overflow-hidden"
             >
-              <div 
+              <div
                 id="printable-badge-card"
                 className="w-full max-w-md bg-white border border-slate-200 rounded-3xl overflow-hidden shadow-2xl relative"
               >
@@ -676,28 +676,40 @@ export default function VisitorPortal() {
                 <ShieldCheck className="w-8 h-8" />
               </div>
               <h2 className="text-2xl font-black text-[#0F172A] tracking-tight mb-2">Unlock Kiosk</h2>
-              <p className="text-xs font-semibold text-slate-500 mb-8 px-4">
+              <p className="text-xs font-semibold text-slate-500 mb-6 px-4">
                 Staff login required to open the kiosk for the day. Unlocks the system for 12 hours.
               </p>
 
+              <div className="mb-6 px-4 py-2.5 bg-blue-50/50 border border-blue-100/80 rounded-xl text-left w-full flex items-start gap-2.5">
+                <div className="p-1 bg-blue-100 text-blue-600 rounded-lg mt-0.5">
+                  <ShieldCheck className="w-3.5 h-3.5" />
+                </div>
+                <div>
+                  <span className="block text-[10px] font-bold text-blue-800 tracking-wider uppercase">Default Kiosk Credentials</span>
+                  <span className="block text-[11px] font-semibold text-blue-600 mt-0.5">
+                    Employee ID: <strong className="font-mono font-bold text-blue-700 bg-blue-100/50 px-1 rounded">2222</strong> &nbsp; Password: <strong className="font-mono font-bold text-blue-700 bg-blue-100/50 px-1 rounded">12345</strong>
+                  </span>
+                </div>
+              </div>
+
               <form onSubmit={handleKioskLogin} className="w-full flex flex-col gap-4">
-                <input 
-                  type="text" 
+                <input
+                  type="text"
                   required
                   placeholder="Employee ID"
                   value={employeeId}
                   onChange={(e) => setEmployeeId(e.target.value)}
                   className="w-full h-14 border border-slate-200 rounded-xl px-4 text-sm font-bold bg-slate-50 hover:bg-slate-50 focus:bg-white focus:border-[#2563EB] focus:ring-4 focus:ring-[#2563EB]/10 transition-all outline-none text-[#0F172A] shadow-sm"
                 />
-                <input 
-                  type="password" 
+                <input
+                  type="password"
                   required
                   placeholder="Password"
                   value={adminPassword}
                   onChange={(e) => setAdminPassword(e.target.value)}
                   className="w-full h-14 border border-slate-200 rounded-xl px-4 text-sm font-bold bg-slate-50 hover:bg-slate-50 focus:bg-white focus:border-[#2563EB] focus:ring-4 focus:ring-[#2563EB]/10 transition-all outline-none text-[#0F172A] shadow-sm"
                 />
-                <button 
+                <button
                   type="submit"
                   disabled={isLoading}
                   className="w-full h-14 bg-[#0F172A] hover:bg-slate-800 disabled:bg-slate-400 text-white rounded-xl text-xs font-black tracking-widest flex items-center justify-center gap-2 transition-all shadow-xl shadow-slate-900/20 cursor-pointer mt-2"
@@ -708,7 +720,7 @@ export default function VisitorPortal() {
             </motion.div>
 
           ) : entryMode === 'idle' ? (
-            
+
             /* IDLE SCREEN (WELCOME / SELECTION) */
             <motion.div
               key="idle_screen"
@@ -726,7 +738,7 @@ export default function VisitorPortal() {
               </p>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 w-full">
-                <button 
+                <button
                   onClick={() => setEntryMode('phone_entry')}
                   className="bg-white hover:bg-slate-50 border border-slate-200 p-6 rounded-2xl flex flex-col items-center gap-3 transition-all shadow-sm hover:shadow-md cursor-pointer group"
                 >
@@ -738,7 +750,7 @@ export default function VisitorPortal() {
                     <span className="block text-[10px] font-bold text-slate-400 mt-1 uppercase tracking-wider">Fast-track Autofill</span>
                   </div>
                 </button>
-                <button 
+                <button
                   onClick={() => setEntryMode('form')}
                   className="bg-[#0F172A] hover:bg-slate-900 border border-slate-800 p-6 rounded-2xl flex flex-col items-center gap-3 transition-all shadow-lg shadow-slate-900/20 group cursor-pointer"
                 >
@@ -775,8 +787,8 @@ export default function VisitorPortal() {
                 <form onSubmit={handlePhoneLookup} className="w-full flex flex-col gap-4">
                   <div className="relative">
                     <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 font-bold">+91</span>
-                    <input 
-                      type="tel" 
+                    <input
+                      type="tel"
                       required
                       autoFocus
                       placeholder="10-digit mobile number"
@@ -785,8 +797,8 @@ export default function VisitorPortal() {
                       className="w-full h-14 border-2 border-slate-200 rounded-xl pl-12 pr-4 text-sm font-black bg-slate-50 hover:bg-slate-50 focus:bg-white focus:border-[#2563EB] focus:ring-4 focus:ring-[#2563EB]/10 transition-all outline-none text-[#0F172A] shadow-sm tracking-widest"
                     />
                   </div>
-                  
-                  <button 
+
+                  <button
                     type="submit"
                     disabled={isLoading}
                     className="w-full h-14 bg-[#2563EB] hover:bg-blue-600 disabled:bg-slate-400 text-white rounded-xl text-xs font-black tracking-widest flex items-center justify-center gap-2 transition-all shadow-xl shadow-blue-500/20 cursor-pointer mt-2"
@@ -794,7 +806,7 @@ export default function VisitorPortal() {
                     {isLoading ? <Clock className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
                     {isLoading ? "SEARCHING..." : "SEARCH RECORDS"}
                   </button>
-                  <button 
+                  <button
                     type="button"
                     onClick={() => {
                       setSearchPhone("");
@@ -829,7 +841,7 @@ export default function VisitorPortal() {
               </div>
 
               <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar space-y-6 mb-6 text-left">
-                
+
                 {/* SECTION 1: Created by Employee */}
                 {preRegisteredMeetings.filter((m: any) => m.created_by_employee).length > 0 && (
                   <div className="space-y-3">
@@ -838,8 +850,8 @@ export default function VisitorPortal() {
                     </h4>
                     <div className="space-y-3">
                       {preRegisteredMeetings.filter((m: any) => m.created_by_employee).map((meeting: any) => (
-                        <div 
-                          key={meeting.visit_id} 
+                        <div
+                          key={meeting.visit_id}
                           className="p-5 border border-slate-200 hover:border-blue-400 bg-slate-50/50 hover:bg-white rounded-2xl transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-4 cursor-pointer group shadow-sm hover:shadow-md"
                           onClick={() => handleSelectMeeting(meeting, false)}
                         >
@@ -848,9 +860,8 @@ export default function VisitorPortal() {
                               <span className="text-xs font-extrabold uppercase text-[#2563EB] tracking-wider bg-blue-50 px-2 py-0.5 rounded-md">
                                 {meeting.category || "Visitor"}
                               </span>
-                              <span className={`text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md ${
-                                meeting.status === 'APPROVED' ? 'bg-green-100 text-green-700 border border-green-200' : 'bg-amber-100 text-amber-700 border border-amber-200'
-                              }`}>
+                              <span className={`text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md ${meeting.status === 'APPROVED' ? 'bg-green-100 text-green-700 border border-green-200' : 'bg-amber-100 text-amber-700 border border-amber-200'
+                                }`}>
                                 {meeting.status}
                               </span>
                             </div>
@@ -887,7 +898,7 @@ export default function VisitorPortal() {
                             )}
                           </div>
 
-                          <button 
+                          <button
                             onClick={(e) => {
                               e.stopPropagation();
                               handleSelectMeeting(meeting, false);
@@ -910,8 +921,8 @@ export default function VisitorPortal() {
                     </h4>
                     <div className="space-y-3">
                       {preRegisteredMeetings.filter((m: any) => !m.created_by_employee).map((meeting: any) => (
-                        <div 
-                          key={meeting.visit_id} 
+                        <div
+                          key={meeting.visit_id}
                           className="p-5 border border-slate-200 hover:border-slate-400 bg-slate-50/50 hover:bg-white rounded-2xl transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-4 cursor-pointer group shadow-sm hover:shadow-md"
                           onClick={() => handleSelectMeeting(meeting, true)}
                         >
@@ -920,9 +931,8 @@ export default function VisitorPortal() {
                               <span className="text-xs font-extrabold uppercase text-slate-600 tracking-wider bg-slate-100 px-2 py-0.5 rounded-md">
                                 {meeting.category || "Visitor"}
                               </span>
-                              <span className={`text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md ${
-                                meeting.status === 'APPROVED' ? 'bg-green-100 text-green-700 border border-green-200' : 'bg-amber-100 text-amber-700 border border-amber-200'
-                              }`}>
+                              <span className={`text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md ${meeting.status === 'APPROVED' ? 'bg-green-100 text-green-700 border border-green-200' : 'bg-amber-100 text-amber-700 border border-amber-200'
+                                }`}>
                                 {meeting.status}
                               </span>
                             </div>
@@ -959,7 +969,7 @@ export default function VisitorPortal() {
                             )}
                           </div>
 
-                          <button 
+                          <button
                             onClick={(e) => {
                               e.stopPropagation();
                               handleSelectMeeting(meeting, true);
@@ -976,14 +986,14 @@ export default function VisitorPortal() {
               </div>
 
               <div className="flex flex-col sm:flex-row gap-3 pt-4 border-t border-slate-100 shrink-0">
-                <button 
+                <button
                   type="button"
                   onClick={handleBypassMeetingsList}
                   className="flex-1 py-3 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold rounded-xl transition-all shadow-sm flex items-center justify-center gap-2 cursor-pointer"
                 >
                   None of these / New Registration
                 </button>
-                <button 
+                <button
                   type="button"
                   onClick={() => {
                     setPreRegisteredMeetings([]);
@@ -1006,7 +1016,7 @@ export default function VisitorPortal() {
               exit={{ opacity: 0, scale: 0.98 }}
               className="w-full h-auto md:h-full bg-white/95 backdrop-blur-md border border-slate-200 rounded-3xl shadow-2xl flex flex-col md:flex-row overflow-hidden"
             >
-              
+
               {/* LEFT COLUMN: FORM FIELDS */}
               <form id="visitor-form" onSubmit={handleSubmitRequest} className="w-full md:w-[70%] p-8 flex flex-col h-auto md:h-full relative shrink-0">
                 <div className="flex items-center justify-between mb-8 shrink-0 border-b border-slate-100 pb-4">
@@ -1040,23 +1050,20 @@ export default function VisitorPortal() {
                 )}
 
                 {selectedMeetingId && (
-                  <div className={`mb-6 p-4 rounded-2xl flex gap-3 text-xs font-semibold leading-relaxed border shrink-0 text-left ${
-                    formData.status === 'APPROVED' 
-                      ? 'bg-blue-50 border-blue-200 text-blue-800' 
+                  <div className={`mb-6 p-4 rounded-2xl flex gap-3 text-xs font-semibold leading-relaxed border shrink-0 text-left ${formData.status === 'APPROVED'
+                      ? 'bg-blue-50 border-blue-200 text-blue-800'
                       : 'bg-amber-50 border-amber-200 text-amber-800'
-                  }`}>
-                    <AlertCircle className={`w-5 h-5 shrink-0 ${
-                      formData.status === 'APPROVED' ? 'text-blue-600' : 'text-amber-600'
-                    }`} />
+                    }`}>
+                    <AlertCircle className={`w-5 h-5 shrink-0 ${formData.status === 'APPROVED' ? 'text-blue-600' : 'text-amber-600'
+                      }`} />
                     <div>
-                      <p className={`font-extrabold uppercase text-[10px] tracking-wide mb-0.5 ${
-                        formData.status === 'APPROVED' ? 'text-blue-950' : 'text-amber-950'
-                      }`}>
+                      <p className={`font-extrabold uppercase text-[10px] tracking-wide mb-0.5 ${formData.status === 'APPROVED' ? 'text-blue-950' : 'text-amber-950'
+                        }`}>
                         {formData.status === 'APPROVED' ? 'Approval Granted' : 'Approval Pending'}
                       </p>
                       <p className="text-[11px]">
-                        {formData.status === 'APPROVED' 
-                          ? 'Your scheduled meeting is already approved. Please capture/upload your photo on the right and accept the safety directives to complete registration.' 
+                        {formData.status === 'APPROVED'
+                          ? 'Your scheduled meeting is already approved. Please capture/upload your photo on the right and accept the safety directives to complete registration.'
                           : 'Please fill in any missing details, capture your photo, and submit. The clearance request will be sent to the host employee.'}
                       </p>
                     </div>
@@ -1065,7 +1072,7 @@ export default function VisitorPortal() {
 
                 {/* MODERN GRID LAYOUT */}
                 <div className="flex-1 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-x-6 gap-y-5 content-start pr-2 custom-scrollbar overflow-y-auto pb-4">
-                  
+
                   {/* Row 1 */}
                   <div className="col-span-1">
                     <label className={labelClass}>Title</label>
@@ -1170,7 +1177,7 @@ export default function VisitorPortal() {
                   <div className="col-span-1">
                     <label className={labelClass}>Accompanied By</label>
                     <select disabled={!!selectedMeetingId} name="accompaniedByCount" value={formData.accompaniedByCount} onChange={handleInputChange} className={inputClass}>
-                      {[0,1,2,3,4].map(n => <option key={n} value={n}>{n} Guests</option>)}
+                      {[0, 1, 2, 3, 4].map(n => <option key={n} value={n}>{n} Guests</option>)}
                     </select>
                   </div>
                   <div className="col-span-1">
@@ -1198,14 +1205,14 @@ export default function VisitorPortal() {
 
               {/* RIGHT COLUMN: IDENTITY & SUBMIT */}
               <div className="w-full md:w-[30%] bg-slate-50/80 md:border-l md:border-t-0 border-t border-slate-200 p-6 flex flex-col h-auto md:h-full justify-between shrink-0">
-                
+
                 {/* Photo Capture Section */}
                 <div className="flex flex-col items-center">
                   <div className="flex items-center gap-2 w-full mb-3 pb-3 border-b border-slate-200">
                     <Camera className="w-4 h-4 text-[#2563EB]" />
                     <span className="text-sm font-extrabold text-slate-800">Identity Scan</span>
                   </div>
-                  
+
                   <div className="w-full max-h-[180px] aspect-video bg-[#0F172A] rounded-2xl overflow-hidden border-[3px] border-white shadow-xl relative flex items-center justify-center group">
                     {useWebcam ? (
                       <Webcam audio={false} ref={webcamRef} screenshotFormat="image/jpeg" className="w-full h-full object-cover" />
