@@ -15,6 +15,7 @@ import {
   ExternalLink
 } from "lucide-react";
 import logo from "@/assets/logo.png";
+import demoVideo from "@/assets/vid1.mov";
 
 export default function LandingPage() {
   const navigate = useNavigate();
@@ -184,8 +185,35 @@ export default function LandingPage() {
           })}
         </div>
 
+        {/* SYSTEM DEMONSTRATION VIDEO */}
+        <section className="w-full max-w-5xl mx-auto px-6 py-12 border-t border-slate-200/60 mt-16 text-center">
+          <div className="flex flex-col items-center mb-8">
+            <span className="text-[10px] font-mono tracking-widest text-[#2563EB] font-bold uppercase mb-2">
+              Demonstration
+            </span>
+            <h3 className="text-2xl font-black text-[#0F172A] tracking-tight mb-3">
+              How the System Works
+            </h3>
+            <p className="text-xs text-slate-500 font-semibold max-w-md">
+              Watch this walkthrough video to understand the seamless visitor registration, employee approval, and security clearance workflow.
+            </p>
+          </div>
+
+          <div className="relative rounded-[2rem] overflow-hidden bg-slate-900 border border-slate-200 shadow-2xl max-w-3xl mx-auto aspect-video">
+            <video 
+              className="w-full h-full object-cover" 
+              controls
+              preload="metadata"
+            >
+              <source src={demoVideo} type="video/quicktime" />
+              <source src={demoVideo} type="video/mp4" />
+              Your browser does not support the video tag.
+            </video>
+          </div>
+        </section>
+
         {/* ABOUT & SYSTEM DETAILS SECTION */}
-        <section className="w-full max-w-5xl mx-auto px-6 py-12 border-t border-slate-200/60 mt-16 text-left">
+        <section className="w-full max-w-5xl mx-auto px-6 py-12 border-t border-slate-200/60 mt-12 text-left">
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-10">
             
             {/* About Column */}
