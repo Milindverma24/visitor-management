@@ -72,7 +72,7 @@ lerna-debug.log*
 .env.*
 .env.example
 
-# Dynamic medi
+# Dynamic media and user uploads
 backend/uploads/*
 !backend/uploads/.gitkeep
 
